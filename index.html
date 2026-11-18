@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>交互实验室 · 物理与微积分</title>
+<style>
+  :root{
+    --ink:#1f2937;
+    --muted:#6b7280;
+    --paper:#f6f4ee;
+    --card:#fffdf9;
+    --line:#e6dfd2;
+    --teal:#0f766e;
+    --violet:#7c3aed;
+    --shadow:0 26px 60px -42px rgba(70,55,25,.6);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:var(--ink);line-height:1.6;
+    background:
+      radial-gradient(900px 520px at 6% -10%, #d9f3ef 0%, rgba(217,243,239,0) 58%),
+      radial-gradient(850px 480px at 100% 0%, #ede9fe 0%, rgba(237,233,254,0) 55%),
+      radial-gradient(700px 420px at 60% 110%, #fff1d6 0%, rgba(255,241,214,0) 60%),
+      var(--paper);
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:1080px;margin:0 auto;padding:22px 24px 60px}
+
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:4px 0 28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px}
+  .logo{width:34px;height:34px;border-radius:11px;background:linear-gradient(140deg,#0f766e,#7c3aed);color:#fff;display:grid;place-items:center;font-family:"Cambria Math",Georgia,serif;font-size:18px;box-shadow:0 10px 20px -10px rgba(80,70,180,.7)}
+  .nav nav{display:flex;gap:6px}
+  .nav nav a{font-size:13px;font-weight:700;color:#5b5344;text-decoration:none;padding:7px 12px;border-radius:999px;transition:.2s}
+  .nav nav a:hover{background:#fff;color:var(--teal);box-shadow:0 2px 8px rgba(70,55,25,.08)}
+
+  .hero{padding:10px 0 14px}
+  .kicker{font-size:11px;font-weight:800;letter-spacing:.22em;color:var(--teal)}
+  h1{font-size:clamp(38px,6vw,56px);line-height:1.12;letter-spacing:-.035em;margin:12px 0 14px;font-weight:800;max-width:820px}
+  h1 em{font-style:normal;background:linear-gradient(115deg,#0f766e 5%,#2563eb 50%,#7c3aed 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{max-width:660px;margin:0;color:#5b5344;font-size:15px;line-height:1.85}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+  .pill{font-size:12px;font-weight:700;color:#5b5344;background:rgba(255,253,249,.92);border:1px solid var(--line);padding:7px 12px;border-radius:999px}
+
+  .section{margin-top:34px}
+  .sec-head{display:flex;align-items:baseline;gap:10px;margin:0 2px 14px;flex-wrap:wrap}
+  .sec-head h2{font-size:22px;margin:0;font-weight:800;letter-spacing:-.01em}
+  .sec-head .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px rgba(15,118,110,.12)}
+  .sec-head.math .dot{background:var(--violet);box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+  .sec-head span{font-size:12px;color:#8b8272}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .card{
+    display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);
+    border-radius:22px;overflow:hidden;text-decoration:none;color:inherit;box-shadow:var(--shadow);
+    transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+  }
+  .card:hover{transform:translateY(-4px);box-shadow:0 34px 70px -40px rgba(70,55,25,.7);border-color:#c7d2fe}
+  .thumb{position:relative;height:190px;overflow:hidden;background:#eef2f2}
+  .thumb img{width:100%;display:block;object-fit:cover;object-position:top center;transition:transform .5s ease}
+  .card:hover .thumb img{transform:scale(1.03)}
+  .thumb::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,20,30,0) 60%,rgba(20,20,30,.06));pointer-events:none}
+  .badge{position:absolute;left:12px;top:12px;z-index:2;font-size:10px;font-weight:800;letter-spacing:.08em;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.95);border:1px solid #d1fae5;color:var(--teal)}
+  .badge.violet{border-color:#ddd6fe;color:var(--violet)}
+  .body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .tags{display:flex;gap:5px;flex-wrap:wrap}
+  .tags span{font-size:10.5px;font-weight:700;color:#6b7280;background:#f3eee3;padding:3px 7px;border-radius:5px}
+  .card h3{font-size:18px;margin:0;letter-spacing:-.01em}
+  .desc{margin:0;font-size:12.5px;color:#6b7280;line-height:1.7}
+  .go{margin-top:auto;padding-top:10px;display:flex;align-items:center;justify-content:space-between;font-weight:800;font-size:12.5px;color:var(--teal)}
+  .card.math .go{color:var(--violet)}
+  .go .arrow{width:28px;height:28px;border-radius:50%;background:rgba(15,118,110,.08);display:grid;place-items:center;transition:.2s;font-size:14px}
+  .card.math .go .arrow{background:rgba(124,58,237,.08)}
+  .card:hover .go .arrow{background:var(--teal);color:#fff;transform:translateX(3px)}
+  .card.math:hover .go .arrow{background:var(--violet);color:#fff}
+
+  .note{margin-top:26px;background:rgba(255,253,249,.72);border:1px dashed #d6cbb6;border-radius:16px;padding:14px 18px;font-size:12px;color:#8b8272;line-height:1.75;display:flex;gap:10px;flex-wrap:wrap}
+  .note b{color:#5b5344}
+
+  footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:11.5px;color:#9a8f7a}
+  footer b{color:#64748b;font-weight:600}
+
+  @media (max-width:760px){
+    .page{padding:18px 16px 46px}
+    .grid{grid-template-columns:1fr}
+    .thumb{height:170px}
+    h1{font-size:38px}
+    .nav nav{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="nav">
+    <div class="brand"><span class="logo">∑</span>交互实验室</div>
+    <nav>
+      <a href="#physics">物理演示</a>
+      <a href="#daily">每日一练</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div class="kicker">INTERACTIVE LAB</div>
+    <h1>一个入口，<em>物理与微积分</em>都能练</h1>
+    <p class="lead">左边是电路与电磁继电器的动态演示，右边是每天 5 道求导 / 积分题。全部在浏览器里直接操作，输入答案就能判分，不用登录。</p>
+    <div class="pills">
+      <span class="pill">2 个物理演示</span>
+      <span class="pill">每天 10 道数学题</span>
+      <span class="pill">输入判分 · 难度自适应</span>
+      <span class="pill">手机 / 平板可用</span>
+    </div>
+  </section>
+
+  <section class="section" id="physics">
+    <div class="sec-head"><span class="dot"></span><h2>物理演示</h2><span>电路 · 电磁继电器 · 可交互动画</span></div>
+    <div class="grid">
+      <a class="card" href="11.html">
+        <div class="thumb"><img src="preview.png" alt="击打力测量电路预览"></div>
+        <div class="body">
+          <div class="tags"><span>压力应变片</span><span>动态电路</span><span>R–F 图像</span></div>
+          <h3>击打力测量电路</h3>
+          <p class="desc">拖动击打力滑块，电流表、应变片阻值与 R–F 图像实时联动；含三问精析和改进方案切换。</p>
+          <div class="go">进入演示 <span class="arrow">→</span></div>
+        </div>
+      </a>
+      <a class="card" href="22.html">
+        <div class="thumb"><img src="preview-relay.png" alt="水位报警器与直流电铃预览"></div>
+        <div class="body">
+          <div class="tags"><span>电磁继电器</span><span>水位报警</span><span>直流电铃</span></div>
+          <h3>水位报警器 &amp; 直流电铃</h3>
+          <p class="desc">拖动水位看红绿灯自动切换；电铃循环演示“吸合—敲击—断电—复位”，部件均有标注。</p>
+          <div class="go">进入演示 <span class="arrow">→</span></div>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <section class="section" id="daily">
+    <div class="sec-head math"><span class="dot"></span><h2>每日一练</h2><span>每天 5 题 · 输入答案判分 · 难度自适应</span></div>
+    <div class="grid">
+      <a class="card math" href="%E6%AF%8F%E6%97%A5%E6%B1%82%E5%AF%BC.html">
+        <div class="thumb"><img src="preview-daily-quiz.png" alt="每日求导页面预览"></div>
+        <div class="body">
+          <div class="tags"><span>三次以下多项式</span><span>求导</span><span>输入判分</span></div>
+          <h3>每日求导</h3>
+          <p class="desc">一次到三次多项式求导，输入答案自动判分；答对 4 题以上升难度，错 3 题以上降难度。</p>
+          <div class="go">进入练习 <span class="arrow">→</span></div>
+        </div>
+      </a>
+      <a class="card math" href="%E6%AF%8F%E6%97%A5%E5%BE%AE%E7%A7%AF%E5%88%86.html">
+        <div class="thumb"><img src="preview-calc.png" alt="每日微积分页面预览"></div>
+        <div class="body">
+          <div class="tags"><span>二次以下积分</span><span>定积分</span><span>输入判分</span></div>
+          <h3>每日微积分</h3>
+          <p class="desc">3 道二次不定积分、1 道一次不定积分、1 道定积分；自动检查 +C，难度随正确率调整。</p>
+          <div class="go">进入练习 <span class="arrow">→</span></div>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <div class="note"><b>使用提示：</b>数学题目每天 00:00 自动更新；难度和完成情况保存在当前浏览器。两个物理演示建议横屏查看，手机端示意图可左右滑动。</div>
+
+  <footer>
+    <span><b>交互实验室</b> · 物理演示 + 每日一练</span>
+    <span>GitHub Pages 静态站点 · 无需登录</span>
+  </footer>
+</div>
+</body>
+</html>
