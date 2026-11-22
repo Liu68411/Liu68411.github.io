@@ -438,7 +438,7 @@
     <div>
       <div class="kicker">FUNCTION &amp; GEOMETRY STUDIO</div>
       <h1>画函数，<em>也画几何</em></h1>
-      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数或方程看图像、求导与不定积分，解析圆方程、作圆的切线；再用点、线、三角形与四边形作中点、三点定角、旋转、轴对称，支持输入含根号的坐标建点与整点吸附；三角形和四边形拖动时保持形状，并可输入修改等腰三角形、平行四边形与菱形的内角，并用三点取角 α。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
+      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数或方程看图像、求导与不定积分、查看 f(x)=0 的根与韦达定理，解析圆方程、作圆的切线；再用点、线、三角形与四边形作中点、三点定角、旋转、轴对称，支持输入含根号的坐标建点与整点吸附；三角形和四边形拖动时保持形状，并可输入修改等腰三角形、平行四边形与菱形的内角，并用三点取角 α。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
     </div>
     <div class="hero-side">
       <div><i></i>三种画布：平面 / 空间 / 空白</div>
@@ -491,7 +491,7 @@
             <button class="chip" data-expr="1/x">1/x</button>
             <button class="chip" data-expr="sqrt(x)">√x</button>
           </div>
-          <div class="formula-card">可直接写 <b>y = …</b>、<b>f(x) = …</b>、普通表达式，或圆方程 <b>(x−h)²+(y−k)²=r²</b>。按 <b>Enter</b> 直接绘制；同一函数会复用已有曲线。</div>
+          <div class="formula-card">可直接写 <b>y = …</b>、<b>f(x) = …</b>、普通表达式，或圆方程 <b>(x−h)²+(y−k)²=r²</b>。按 <b>Enter</b> 直接绘制；同一函数会复用已有曲线。悬停曲线可查看含 π、e、根号的精确坐标。</div>
 
           <div class="subcard">
             <h4>求导 <span class="badge">DERIVATIVE</span></h4>
@@ -554,7 +554,7 @@
             </div>
           </div>
 
-          <div class="hint-box"><span>◎</span><div>生成后可在右侧查看<b>标准方程、焦点、离心率、准线或渐近线</b>。圆锥曲线会叠加在当前平面画布上。</div></div>
+          <div class="hint-box"><span>◎</span><div>生成后可在右侧查看<b>标准方程、焦点、离心率、准线或渐近线</b>。圆锥曲线会叠加在当前平面画布上。悬停曲线上可查看<b>含根号的精确坐标</b>。</div></div>
         </section>
 
         <section class="tab-pane" data-pane="geometry">
@@ -874,6 +874,6 @@
 
 <div class="toast" id="toast"></div>
 <div class="js-error" id="jsError"></div>
-<script src="functions-geometry.js?v=20261125"></script>
+<script src="functions-geometry.js?v=20261127"></script>
 </body>
 </html>

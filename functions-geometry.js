@@ -58,6 +58,7 @@ const state = {
   selected: null,
   hover: null,
   pending: [],
+  graphHover: null,
   transformTarget: null,
   preview: null,
   drag: null,
@@ -82,6 +83,101 @@ function fmt(n, digits = 3) {
 function fmtSigned(n, digits = 3) {
   const s = fmt(n, digits);
   return s.startsWith('-') ? `− ${s.slice(1)}` : `+ ${s}`;
+}
+
+/* ---------- 精确数值识别（π / e / 根号 / 分数） ---------- */
+
+let exactCandidateCache = null;
+
+function exactCandidates() {
+  if (exactCandidateCache) return exactCandidateCache;
+  const list = [];
+  const seen = new Set();
+  const push = (value, text, rank) => {
+    if (!Number.isFinite(value) || Math.abs(value) > 60 || seen.has(text)) return;
+    seen.add(text);
+    list.push({ value, text, rank });
+  };
+  const gcdInt = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { const t = a % b; a = b; b = t; } return a || 1; };
+  const ratText = (p, q) => {
+    if (q === 1) return p < 0 ? `−${-p}` : String(p);
+    return `${p < 0 ? '−' : ''}${Math.abs(p)}/${q}`;
+  };
+  const piText = (p, q) => {
+    const g = gcdInt(p, q); p /= g; q /= g;
+    if (q === 1) return p === 1 ? 'π' : p === -1 ? '−π' : `${p < 0 ? '−' : ''}${Math.abs(p)}π`;
+    return `${p < 0 ? '−' : ''}${p === 1 || p === -1 ? '' : Math.abs(p)}π/${q}`;
+  };
+  const radText = (p, q, n) => {
+    const g = gcdInt(p, q); p /= g; q /= g;
+    if (q === 1) return p === 1 ? `√${n}` : p === -1 ? `−√${n}` : `${p < 0 ? '−' : ''}${Math.abs(p)}√${n}`;
+    return `${p < 0 ? '−' : ''}${p === 1 || p === -1 ? '' : Math.abs(p)}√${n}/${q}`;
+  };
+  // 分数 / 整数
+  for (let q = 1; q <= 12; q++) {
+    for (let p = -24; p <= 24; p++) {
+      if (q > 1 && gcdInt(p, q) !== 1) continue;
+      push(p / q, ratText(p, q), 1);
+    }
+  }
+  // π 与 e 的有理倍数
+  for (let q = 1; q <= 8; q++) {
+    for (let p = -12; p <= 12; p++) {
+      if (!p || (q > 1 && gcdInt(p, q) !== 1)) continue;
+      push(p / q * Math.PI, piText(p, q), 2);
+      const eg = gcdInt(p, q), ep = p / eg, eq = q / eg;
+      push(p / q * Math.E, `${ep < 0 ? '−' : ''}${ep === 1 || ep === -1 ? '' : Math.abs(ep)}e${eq > 1 ? '/' + eq : ''}`, 2);
+    }
+  }
+  // 根号
+  for (let n = 2; n <= 30; n++) {
+    for (let q = 1; q <= 6; q++) {
+      for (let p = -12; p <= 12; p++) {
+        if (!p || (q > 1 && gcdInt(p, q) !== 1)) continue;
+        push(p / q * Math.sqrt(n), radText(p, q, n), 3);
+      }
+    }
+  }
+  // a + b√n（用于圆锥曲线上的精确点）
+  for (let n = 2; n <= 12; n++) {
+    const rt = Math.sqrt(n);
+    for (let bi = -12; bi <= 12; bi++) {
+      if (!bi) continue;
+      const b = bi / 2;
+      const bTxt = radText(bi, 2, n);
+      for (let ai = -12; ai <= 12; ai++) {
+        const a = ai / 2;
+        if (!a) continue;
+        const absA = Math.abs(a);
+        const aTxt = Number.isInteger(absA) ? String(absA) : `${Math.round(absA * 2)}/2`;
+        const text = `${a < 0 ? '−' : ''}${aTxt} ${b > 0 ? '+' : '−'} ${bTxt.replace('−', '')}`;
+        push(a + b * rt, text, 5);
+      }
+    }
+  }
+  exactCandidateCache = list;
+  return list;
+}
+
+function exactNumber(value, tolerance = 1e-6, maxRank = 5) {
+  if (!Number.isFinite(value)) return null;
+  if (Math.abs(value) < 1e-10) return { value: 0, text: '0', rank: 1 };
+  let best = null, bestScore = Infinity;
+  for (const c of exactCandidates()) {
+    if (c.rank > maxRank) continue;
+    const diff = Math.abs(value - c.value);
+    if (diff > tolerance) continue;
+    const score = diff + c.rank * 0.0002;
+    if (score < bestScore) { bestScore = score; best = c; }
+  }
+  return best;
+}
+
+function snapCoordinateExact(value) { return exactNumber(value, 0.0025, 3); }
+
+function exactText(value, digits = 4) {
+  const ex = exactNumber(value, 1e-6, 5);
+  return ex ? ex.text : fmt(value, digits);
 }
 function deg(rad) { return rad / DEG; }
 function rad(d) { return d * DEG; }
@@ -914,6 +1010,7 @@ function draw() {
       drawCircleTangent();
     }
     if (state.tab === 'geometry') drawGeometry();
+    drawGraphHover();
     drawPendingPreview();
   }
   updateLegend();
@@ -1371,6 +1468,180 @@ function drawConic(c) {
     drawStone(v.x, v.y, '#7c3aed');
     chip('顶点', v.x + 9, v.y + 16, '#6b21a8');
   }
+}
+
+/* ---------- 图像悬停坐标 ---------- */
+
+function conicYAt(c, x) {
+  if (!c) return [];
+  const dx = x - c.h;
+  if (c.kind === 'circle') {
+    const d = c.r * c.r - dx * dx;
+    if (d < -1e-9) return [];
+    const s = Math.sqrt(Math.max(0, d));
+    return [c.k - s, c.k + s];
+  }
+  if (c.kind === 'ellipse') {
+    const u = dx / c.a;
+    if (Math.abs(u) > 1 + 1e-9) return [];
+    const s = c.b * Math.sqrt(Math.max(0, 1 - u * u));
+    return [c.k - s, c.k + s];
+  }
+  if (c.kind === 'parabola') {
+    if (c.orient === 'right' || c.orient === 'left') {
+      const v = c.orient === 'right' ? 2 * c.p * dx : -2 * c.p * dx;
+      if (v < -1e-9) return [];
+      const s = Math.sqrt(Math.max(0, v));
+      return [c.k - s, c.k + s];
+    }
+    const dy = dx * dx / (2 * c.p);
+    return [c.orient === 'up' ? c.k + dy : c.k - dy];
+  }
+  if (c.kind === 'hyperbola') {
+    if (c.vertical) {
+      const s = c.a * Math.sqrt(1 + (dx * dx) / (c.b * c.b));
+      return [c.k - s, c.k + s];
+    }
+    const u = dx / c.a;
+    if (Math.abs(u) < 1 - 1e-9) return [];
+    const s = c.b * Math.sqrt(Math.max(0, u * u - 1));
+    return [c.k - s, c.k + s];
+  }
+  return [];
+}
+
+function hoverPair(h) {
+  const x = h.exactX || fmt(h.x, 4);
+  const y = h.exactY || fmt(h.y, 4);
+  const exact = !!(h.exactX && h.exactY);
+  return { text: `(${x}, ${y})`, exact };
+}
+
+const functionRootCache = new Map();
+function cachedFunctionRoots(fn) {
+  const a = s2w({ x: 0, y: 0 }).x, b = s2w({ x: W, y: 0 }).x;
+  const key = `${fn.expr}|${Math.round(a * 100)}|${Math.round(b * 100)}`;
+  if (functionRootCache.has(key)) return functionRootCache.get(key);
+  const poly = polyFromAst(fn.ast);
+  let roots = [];
+  if (poly && trimPoly(poly).length > 1) roots = polynomialRoots(poly).real;
+  else roots = numericFunctionRoots(fn);
+  functionRootCache.set(key, roots);
+  return roots;
+}
+
+function clearGraphHover(redraw = true) {
+  if (!state.graphHover) return;
+  state.graphHover = null;
+  if (redraw) draw();
+}
+
+function closestConicPoint(c, sp) {
+  let best = null;
+  for (const br of conicPoints(c)) {
+    for (let i = 0; i + 1 < br.length; i++) {
+      const a = w2s(br[i]), b = w2s(br[i + 1]);
+      const vx = b.x - a.x, vy = b.y - a.y;
+      const len2 = vx * vx + vy * vy;
+      const t = len2 < 1e-9 ? 0 : clamp(((sp.x - a.x) * vx + (sp.y - a.y) * vy) / len2, 0, 1);
+      const qx = a.x + vx * t, qy = a.y + vy * t;
+      const d = Math.hypot(qx - sp.x, qy - sp.y);
+      if (!best || d < best.d) {
+        best = {
+          d,
+          p: { x: br[i].x + (br[i + 1].x - br[i].x) * t, y: br[i].y + (br[i + 1].y - br[i].y) * t }
+        };
+      }
+    }
+  }
+  return best;
+}
+
+function updateGraphHover(sp) {
+  if (state.mode === 'space' || (state.tab !== 'function' && state.tab !== 'conic')) {
+    clearGraphHover(false);
+    return;
+  }
+  if (state.tab === 'function') {
+    const w = s2w(sp);
+    let best = null;
+    for (const fn of state.functions) {
+      if (!fn.visible) continue;
+      const y = evalNode(fn.ast, w.x);
+      if (!Number.isFinite(y) || Math.abs(y) > 1e7) continue;
+      const sy = w2s({ x: w.x, y }).y;
+      const d = Math.abs(sy - sp.y);
+      if (d <= 13 && (!best || d < best.d)) best = { fn, y, d };
+    }
+    if (!best) { clearGraphHover(); return; }
+    let x = w.x, y = best.y, exText = null;
+    let ex = snapCoordinateExact(x);
+    if (!ex && Math.abs(y) < 0.02) {
+      const nearRoot = cachedFunctionRoots(best.fn).find(r => Math.abs(r - w.x) < 0.02);
+      if (nearRoot !== undefined) {
+        const yy = evalNode(best.fn.ast, nearRoot);
+        if (Number.isFinite(yy) && Math.abs(yy) < 1e-4) {
+          x = nearRoot; y = yy;
+          ex = exactNumber(nearRoot, 1e-6, 5);
+        }
+      }
+    }
+    if (ex) {
+      const yy = evalNode(best.fn.ast, ex.value);
+      if (Number.isFinite(yy)) { x = ex.value; y = yy; exText = ex.text; }
+    }
+    const ey = exText ? exactNumber(y, 1e-6, 5) : null;
+    const idx = state.functions.indexOf(best.fn) + 1;
+    state.graphHover = {
+      x, y, fnId: best.fn.id,
+      exactX: exText,
+      exactY: ey ? ey.text : null,
+      label: `f${subscript(idx)}(x) 上的点`
+    };
+  } else {
+    const c = state.curve;
+    if (!c || c.visible === false) { clearGraphHover(); return; }
+    const best = closestConicPoint(c, sp);
+    if (!best || best.d > 13) { clearGraphHover(); return; }
+    let x = best.p.x, y = best.p.y, exText = null;
+    const ex = snapCoordinateExact(x);
+    if (ex) {
+      const ys = conicYAt(c, ex.value);
+      if (ys.length) {
+        x = ex.value;
+        y = ys.reduce((a, b) => Math.abs(b - best.p.y) < Math.abs(a - best.p.y) ? b : a, ys[0]);
+        exText = ex.text;
+      }
+    }
+    const ey = exText ? exactNumber(y, 1e-6, 5) : null;
+    const kindName = c.kind === 'circle' ? '圆' : c.kind === 'ellipse' ? '椭圆' : c.kind === 'parabola' ? '抛物线' : '双曲线';
+    state.graphHover = {
+      x, y,
+      exactX: exText,
+      exactY: ey ? ey.text : null,
+      label: `${kindName}上的点`
+    };
+  }
+  const hp = hoverPair(state.graphHover);
+  const el = $('#coordReadout');
+  if (el) el.innerHTML = `<b>${esc(hp.text)}</b> &nbsp;·&nbsp; ${esc(state.graphHover.label)}`;
+  draw();
+}
+
+function drawGraphHover() {
+  const h = state.graphHover;
+  if (!h || state.mode === 'space' || (state.tab !== 'function' && state.tab !== 'conic')) return;
+  const p = w2s(h);
+  const hp = hoverPair(h);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(p.x, p.y, 4.2, 0, TAU);
+  ctx.fillStyle = '#0f766e'; ctx.fill();
+  ctx.strokeStyle = '#fffdf8'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, TAU);
+  ctx.strokeStyle = 'rgba(15,118,110,.28)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+  const align = p.x > W - 190 ? 'right' : 'left';
+  chip(`${hp.exact ? '' : '≈ '}${hp.text}`, align === 'right' ? p.x - 12 : p.x + 12, p.y - 14, '#0f766e', 'rgba(247,255,252,.96)', align);
 }
 
 /* ---------- 3D 坐标系 ---------- */
@@ -3057,7 +3328,7 @@ const TOOL_NAMES = {
 
 function setMode(mode) {
   state.mode = mode;
-  state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null; state.hover = null;
+  state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null; state.hover = null; state.graphHover = null;
   $$('.mode-btn').forEach(b => {
     const on = b.dataset.mode === mode;
     b.classList.toggle('active', on);
@@ -3102,7 +3373,7 @@ function updateModeStatus() {
 function setTab(tab) {
   if (state.mode === 'space') return;
   state.tab = tab;
-  state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null;
+  state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null; state.graphHover = null;
   $$('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab));
   $('#analysisSection').hidden = tab === 'geometry';
@@ -3279,6 +3550,212 @@ function renderObjectList() {
 function eyeIcon() { return '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.4"/></svg>'; }
 function trashIcon() { return '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>'; }
 
+/* ---------- 多项式根与韦达定理 ---------- */
+
+function trimPoly(a) {
+  let n = a.length;
+  while (n > 1 && Math.abs(a[n - 1]) < 1e-10) n--;
+  return a.slice(0, n);
+}
+function polyAdd(a, b, sign = 1) {
+  const out = new Array(Math.max(a.length, b.length)).fill(0);
+  for (let i = 0; i < a.length; i++) out[i] += a[i];
+  for (let i = 0; i < b.length; i++) out[i] += sign * b[i];
+  return trimPoly(out);
+}
+function polyMul(a, b) {
+  const out = new Array(a.length + b.length - 1).fill(0);
+  for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) out[i + j] += a[i] * b[j];
+  return trimPoly(out);
+}
+function polyPow(a, n) {
+  let out = [1];
+  for (let i = 0; i < n; i++) out = polyMul(out, a);
+  return out;
+}
+function polyFromAst(n) {
+  if (!n) return null;
+  if (n.t === 'num') return [n.v];
+  if (n.t === 'const') return [n.name === 'pi' ? Math.PI : Math.E];
+  if (n.t === 'var') return [0, 1];
+  if (n.t === 'un') {
+    const a = polyFromAst(n.a);
+    return a ? a.map(v => n.op === '-' ? -v : v) : null;
+  }
+  if (n.t === 'bin') {
+    const a = polyFromAst(n.l), b = polyFromAst(n.r);
+    if (!a || !b) return null;
+    if (n.op === '+') return polyAdd(a, b);
+    if (n.op === '-') return polyAdd(a, b, -1);
+    if (n.op === '*') return polyMul(a, b);
+    if (n.op === '/') {
+      if (b.length !== 1 || Math.abs(b[0]) < 1e-12) return null;
+      return trimPoly(a.map(v => v / b[0]));
+    }
+    if (n.op === '^') {
+      if (!n.r || n.r.t !== 'num' || !Number.isInteger(n.r.v) || n.r.v < 0 || n.r.v > 8) return null;
+      return trimPoly(polyPow(a, n.r.v));
+    }
+    return null;
+  }
+  if (n.t === 'call' && !astUsesVariable(n)) {
+    const v = evalNode(n, 0);
+    return Number.isFinite(v) ? [v] : null;
+  }
+  return null;
+}
+function polyEval(coeffs, x) {
+  let v = 0;
+  for (let i = coeffs.length - 1; i >= 0; i--) v = v * x + coeffs[i];
+  return v;
+}
+function bisectPoly(coeffs, a, b, fa, fb) {
+  for (let i = 0; i < 80; i++) {
+    const m = (a + b) / 2, fm = polyEval(coeffs, m);
+    if (Math.abs(fm) < 1e-13) return m;
+    if ((fa < 0) !== (fm < 0)) { b = m; fb = fm; } else { a = m; fa = fm; }
+  }
+  return (a + b) / 2;
+}
+function polynomialRoots(coeffs) {
+  coeffs = trimPoly(coeffs);
+  const n = coeffs.length - 1;
+  if (n <= 0) return { real: [], complex: null };
+  if (n === 1) return { real: [-coeffs[0] / coeffs[1]], complex: null };
+  if (n === 2) {
+    const a = coeffs[2], b = coeffs[1], c = coeffs[0];
+    const disc = b * b - 4 * a * c;
+    if (disc < -1e-10) {
+      const re = -b / (2 * a), im = Math.sqrt(-disc) / Math.abs(2 * a);
+      return { real: [], complex: { re, im } };
+    }
+    const s = Math.sqrt(Math.max(0, disc));
+    return { real: [(-b - s) / (2 * a), (-b + s) / (2 * a)], complex: null };
+  }
+  const lead = coeffs[n];
+  if (Math.abs(lead) < 1e-12) return { real: [], complex: null };
+  const monic = coeffs.map(v => v / lead);
+  let bound = 1;
+  for (let i = 0; i < n; i++) bound = Math.max(bound, 1 + Math.abs(monic[i]));
+  bound = Math.min(bound, 80);
+  const roots = [];
+  const N = 2400;
+  let prevX = -bound, prevY = polyEval(monic, prevX);
+  if (Math.abs(prevY) < 1e-12) roots.push(prevX);
+  for (let i = 1; i <= N; i++) {
+    const x = -bound + (2 * bound) * i / N;
+    const y = polyEval(monic, x);
+    if (Number.isFinite(y)) {
+      if (Math.abs(y) < 1e-12) roots.push(x);
+      if (Number.isFinite(prevY) && (prevY < 0) !== (y < 0)) {
+        const r = bisectPoly(monic, prevX, x, prevY, y);
+        if (Math.abs(polyEval(monic, r)) < 1e-6) roots.push(r);
+      }
+    }
+    prevX = x; prevY = y;
+  }
+  // 检查偶重根：导数为零的位置
+  const dcoeffs = [];
+  for (let i = 1; i <= n; i++) dcoeffs.push(monic[i] * i);
+  const dRoots = polynomialRoots(dcoeffs).real;
+  for (const c of dRoots) {
+    if (Math.abs(polyEval(monic, c)) < 1e-7) roots.push(c);
+  }
+  const out = [];
+  for (const r of roots.sort((a, b) => a - b)) {
+    if (!out.some(q => Math.abs(q - r) < 1e-6)) out.push(r);
+  }
+  return { real: out, complex: null };
+}
+function vietaRows(coeffs) {
+  const n = trimPoly(coeffs).length - 1;
+  if (n < 2) return [];
+  const a = trimPoly(coeffs), an = a[n];
+  if (Math.abs(an) < 1e-12) return [];
+  const rows = [];
+  const addRow = (label, formula, value) => {
+    const ex = exactNumber(value, 1e-7, 5);
+    rows.push({ label, formula, value: ex ? ex.text : fmt(value, 5) });
+  };
+  addRow(n === 2 ? 'x₁ + x₂' : n === 3 ? 'x₁ + x₂ + x₃' : '所有根之和',
+    n === 2 ? '−b/a' : n === 3 ? '−b/a' : '−aₙ₋₁/aₙ', -a[n - 1] / an);
+  addRow(n === 2 ? 'x₁x₂' : n === 3 ? 'x₁x₂ + x₂x₃ + x₃x₁' : '所有根两两乘积之和',
+    n === 2 ? 'c/a' : n === 3 ? 'c/a' : 'aₙ₋₂/aₙ', a[n - 2] / an);
+  if (n >= 3) addRow(n === 3 ? 'x₁x₂x₃' : '所有根之积', n === 3 ? '−d/a' : '(−1)ⁿa₀/aₙ', (n % 2 ? -1 : 1) * a[0] / an);
+  return rows;
+}
+function numericFunctionRoots(fn) {
+  const a = s2w({ x: 0, y: 0 }).x, b = s2w({ x: W, y: 0 }).x;
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  if (!(hi > lo)) return [];
+  const roots = [];
+  const N = 1600;
+  let px = lo, py = evalNode(fn.ast, px);
+  for (let i = 1; i <= N; i++) {
+    const x = lo + (hi - lo) * i / N;
+    const y = evalNode(fn.ast, x);
+    if (Number.isFinite(py) && Number.isFinite(y)) {
+      if (Math.abs(y) < 1e-10) roots.push(x);
+      else if ((py < 0) !== (y < 0)) {
+        let aa = px, bb = x, fa = py;
+        for (let j = 0; j < 70; j++) {
+          const m = (aa + bb) / 2, fm = evalNode(fn.ast, m);
+          if (!Number.isFinite(fm)) break;
+          if (Math.abs(fm) < 1e-12) { aa = bb = m; break; }
+          if ((fa < 0) !== (fm < 0)) bb = m; else { aa = m; fa = fm; }
+        }
+        const r = (aa + bb) / 2;
+        if (Math.abs(evalNode(fn.ast, r)) < 1e-3) roots.push(r);
+      }
+    }
+    px = x; py = y;
+  }
+  const out = [];
+  for (const r of roots.sort((a, b) => a - b)) {
+    if (!out.some(q => Math.abs(q - r) < 1e-6)) out.push(r);
+  }
+  return out.slice(0, 8);
+}
+function equationAnalysisHTML(fn) {
+  const poly = polyFromAst(fn.ast);
+  const coeffs = poly ? trimPoly(poly) : null;
+  const degree = coeffs ? coeffs.length - 1 : -1;
+  let roots = [], complex = null;
+  if (coeffs && degree >= 1) {
+    const rr = polynomialRoots(coeffs);
+    roots = rr.real; complex = rr.complex;
+  } else if (!coeffs) {
+    roots = numericFunctionRoots(fn);
+  }
+  let html = `<div style="margin-top:11px"><div class="analysis-title"><span class="tag teal">ROOTS</span>f(x) = 0</div>`;
+  if (coeffs && degree === 0) {
+    html += `<div class="analysis-empty">${Math.abs(coeffs[0]) < 1e-12 ? '恒等于 0，所有实数都是根。' : '常数函数，没有根。'}</div></div>`;
+    return html;
+  }
+  if (coeffs) html += `<div class="sel-sub">${degree} 次多项式 · 实根与韦达定理</div>`;
+  else html += `<div class="sel-sub">非多项式 · 当前视图内的数值根</div>`;
+  if (roots.length) {
+    const shown = roots.slice(0, 6).map((r, i) => `x${subscript(i + 1)} = ${exactText(r, 5)}`).join('，');
+    html += `<div class="math-line">${shown}${roots.length > 6 ? ' …' : ''}</div>`;
+  } else if (complex) {
+    const re = exactText(complex.re, 5), im = exactText(complex.im, 5);
+    html += `<div class="math-line">无实数根</div><div class="math-line" style="font-size:11px;color:#7a6f5c">复数根：x = ${esc(re)} ± ${esc(im)}i</div>`;
+  } else {
+    html += `<div class="analysis-empty">${coeffs ? '没有实数根。' : '当前视图内没有找到实根，可缩放后重试。'}</div>`;
+  }
+  if (coeffs && degree >= 2) {
+    const rows = vietaRows(coeffs);
+    if (rows.length) {
+      html += `<div class="analysis-title" style="margin-top:10px"><span class="tag amber">VIETA</span>韦达定理</div>`;
+      html += rows.map(r => `<div class="measure-row"><span>${esc(r.label)}</span><b class="txt">${esc(r.formula)} = ${esc(r.value)}</b></div>`).join('');
+    }
+  } else if (!coeffs) {
+    html += `<div class="sel-sub" style="margin-top:5px">非多项式函数不适用韦达定理。</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderAnalysis() {
   const box = $('#analysisBox');
   const meta = $('#analysisMeta');
@@ -3320,6 +3797,7 @@ function renderAnalysis() {
   let html = `<div class="analysis-title"><span class="tag">FUNCTION</span>当前函数</div>`;
   html += `<div class="math-line">f(x) = ${escMath(toStr(fn.ast))}</div>`;
   html += '<div class="metric-grid"><div class="metric"><span>颜色</span><b style="color:' + fn.color + '">f' + subscript(state.functions.indexOf(fn) + 1) + '(x)</b></div><div class="metric"><span>状态</span><b>' + (fn.visible ? '已显示' : '已隐藏') + '</b></div></div>';
+  html += equationAnalysisHTML(fn);
 
   const calc = state.calc && state.calc.fnId === fn.id ? state.calc : null;
   if (calc && calc.deriv) {
@@ -4378,6 +4856,7 @@ function constrainedQuadForPoint(pointId) {
 function onPointerDown(e) {
   if (e.button !== 0) return;
   const sp = eventPos(e);
+  state.graphHover = null;
   canvas.setPointerCapture(e.pointerId);
   if (state.mode === 'space') {
     state.drag = { type: 'orbit', sx: sp.x, sy: sp.y, yaw: state.space.yaw, pitch: state.space.pitch, moved: false };
@@ -4448,8 +4927,9 @@ function onPointerMove(e) {
   const sp = eventPos(e);
   updateCoords(sp);
   if (!state.drag) {
-    if (state.mode === 'space') return;
+    if (state.mode === 'space') { clearGraphHover(); return; }
     if (state.tangentPicking) { canvas.style.cursor = 'crosshair'; return; }
+    updateGraphHover(sp);
     const hover = state.tool === 'select' ? (hitTestPoint(sp, 12) ? { kind: 'point', id: hitTestPoint(sp, 12).id } : (hitTestShape(sp) ? { kind: 'shape', id: hitTestShape(sp).id } : null))
       : state.tool === 'congruent' || state.tool === 'similar' ? (() => { const t = triangleAt(sp); return t ? { kind: 'shape', id: t.id } : null; })()
       : null;
@@ -5500,7 +5980,7 @@ function bindUI() {
   canvas.addEventListener('pointercancel', () => { state.drag = null; });
   canvas.addEventListener('pointerleave', () => {
     if (state.drag) return;
-    state.hover = null; state.preview = null; draw();
+    state.hover = null; state.preview = null; state.graphHover = null; draw();
   });
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); cancelPending(); });
