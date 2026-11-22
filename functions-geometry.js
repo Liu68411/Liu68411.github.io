@@ -1571,7 +1571,7 @@ function updateGraphHover(sp) {
       if (!Number.isFinite(y) || Math.abs(y) > 1e7) continue;
       const sy = w2s({ x: w.x, y }).y;
       const d = Math.abs(sy - sp.y);
-      if (d <= 13 && (!best || d < best.d)) best = { fn, y, d };
+      if (d <= 30 && (!best || d < best.d)) best = { fn, y, d };
     }
     if (!best) { clearGraphHover(); return; }
     let x = w.x, y = best.y, exText = null;
@@ -1602,7 +1602,7 @@ function updateGraphHover(sp) {
     const c = state.curve;
     if (!c || c.visible === false) { clearGraphHover(); return; }
     const best = closestConicPoint(c, sp);
-    if (!best || best.d > 13) { clearGraphHover(); return; }
+    if (!best || best.d > 24) { clearGraphHover(); return; }
     let x = best.p.x, y = best.p.y, exText = null;
     const ex = snapCoordinateExact(x);
     if (ex) {
@@ -3328,6 +3328,7 @@ const TOOL_NAMES = {
 
 function setMode(mode) {
   state.mode = mode;
+  if (canvas) canvas.style.cursor = mode === 'space' ? 'default' : (state.tab === 'geometry' && state.tool !== 'select' ? 'crosshair' : 'default');
   state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null; state.hover = null; state.graphHover = null;
   $$('.mode-btn').forEach(b => {
     const on = b.dataset.mode === mode;
@@ -3383,6 +3384,7 @@ function setTab(tab) {
   $('#canvasModeText').textContent = tab === 'function' ? '函数图像' : tab === 'conic' ? '圆锥曲线' : '几何作图';
   state.analysisMode = tab === 'conic' ? 'conic' : 'function';
   if (tab !== 'conic') state.tangentPicking = false;
+  if (state.mode !== 'space') canvas.style.cursor = tab === 'geometry' && state.tool !== 'select' ? 'crosshair' : 'default';
   updateModeStatus();
   updateHint();
   updateTangentUI();
@@ -3410,6 +3412,7 @@ function setTool(tool) {
   state.tool = tool;
   state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null;
   $$('.tool').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+  if (state.mode !== 'space') canvas.style.cursor = tool === 'select' ? 'default' : 'crosshair';
   updateHint();
   updateTransformUI();
   draw();
@@ -3425,7 +3428,7 @@ function updateHint() {
     return;
   }
   if (state.tab === 'function') {
-    foot.innerHTML = '<b>提示：</b>拖动平移 · 滚轮缩放 · Enter 绘制';
+    foot.innerHTML = '<b>提示：</b>中键拖动平移 · 滚轮缩放 · Enter 绘制';
     hint.innerHTML = '<b>函数研究：</b>输入表达式并绘制；选中某条曲线后用左侧「求导」看切线，用「定积分」显示积分区域。画布支持多条函数叠加。';
     return;
   }
@@ -3452,7 +3455,7 @@ function updateHint() {
     return;
   }
   const map = {
-    select: ['拖动顶点或整个图形；空白处拖动平移。', '点击选中对象；拖动顶点改变形状。按住 Alt 可临时关闭网格吸附。'],
+    select: ['拖动顶点或整个图形；按住鼠标中键拖动平移画布。', '点击选中对象；拖动顶点改变形状。按住 Alt 可临时关闭网格吸附。'],
     point: ['点击放置一个点；靠近已有顶点会自动吸附。', '点会被后续线段、三角形等复用，便于构造共享顶点。'],
     segment: ['依次点击两个端点，创建线段。', '依次点击两个点。靠近已有顶点时会复用该点。'],
     ray: ['先点击端点，再点击射线方向上的点。', '射线从第一个点出发，穿过第二个点无限延伸。'],
@@ -4854,10 +4857,20 @@ function constrainedQuadForPoint(pointId) {
 }
 
 function onPointerDown(e) {
-  if (e.button !== 0) return;
+  if (e.button !== 0 && e.button !== 1) return;
+  if (e.button === 1) e.preventDefault();
   const sp = eventPos(e);
   state.graphHover = null;
   canvas.setPointerCapture(e.pointerId);
+  if (e.button === 1) {
+    if (state.mode === 'space') {
+      state.drag = { type: 'orbit', sx: sp.x, sy: sp.y, yaw: state.space.yaw, pitch: state.space.pitch, moved: false, button: 1 };
+    } else {
+      state.drag = { type: 'pan', sx: sp.x, sy: sp.y, panX: state.view.panX, panY: state.view.panY, moved: false, button: 1 };
+      canvas.style.cursor = 'grabbing';
+    }
+    return;
+  }
   if (state.mode === 'space') {
     state.drag = { type: 'orbit', sx: sp.x, sy: sp.y, yaw: state.space.yaw, pitch: state.space.pitch, moved: false };
     return;
@@ -4916,7 +4929,7 @@ function onPointerDown(e) {
       return;
     }
     state.selected = null;
-    state.drag = { type: 'pan', sx: sp.x, sy: sp.y, panX: state.view.panX, panY: state.view.panY, moved: false };
+    state.drag = { type: 'blank', sx: sp.x, sy: sp.y, moved: false };
     renderAllPanels(); draw();
     return;
   }
@@ -4935,7 +4948,8 @@ function onPointerMove(e) {
       : null;
     const changed = (hover && !state.hover) || (!hover && state.hover) || (hover && state.hover && (hover.kind !== state.hover.kind || hover.id !== state.hover.id));
     state.hover = hover;
-    canvas.style.cursor = hover ? 'pointer' : state.tool === 'select' ? 'grab' : 'crosshair';
+    const drawingTool = state.tab === 'geometry' && state.tool !== 'select';
+    canvas.style.cursor = hover ? 'pointer' : drawingTool ? 'crosshair' : 'default';
     if (['select', 'point', 'segment', 'ray', 'line', 'triangle', 'right-triangle', 'isosceles-triangle', 'right-isosceles', 'equilateral', 'square', 'rectangle', 'parallelogram', 'rhombus', 'circle', 'perp-bisector', 'angle-bisector', 'angle', 'set-alpha', 'midpoint'].includes(state.tool)) {
       state.preview = snapWorld(sp, e.altKey);
       draw();
@@ -5077,11 +5091,11 @@ function onPointerUp(e) {
   if (d.type === 'tangent-pick') {
     if (!d.moved) computeCircleTangent(s2w(sp));
     state.tangentPicking = false;
-    canvas.style.cursor = 'grab';
+    canvas.style.cursor = 'default';
     updateTangentUI(); saveSoon(); draw();
     return;
   }
-  if (d.type === 'pan' && !d.moved) {
+  if (d.type === 'pan' && !d.moved && d.button !== 1) {
     state.selected = null; renderAllPanels(); draw();
   }
   if (d.type === 'click' && !d.moved) {
@@ -5089,6 +5103,7 @@ function onPointerUp(e) {
   }
   if (['orbit', 'pan', 'point', 'shape', 'constrained', 'constrained-quad'].includes(d.type)) saveSoon();
   if (['point', 'shape', 'constrained', 'constrained-quad'].includes(d.type)) updateTransformUI();
+  if (d.type === 'pan' || d.type === 'blank' || d.type === 'orbit') canvas.style.cursor = 'default';
   updateToolbarVisibility();
   draw();
 }
@@ -5877,7 +5892,7 @@ function bindUI() {
       canvas.style.cursor = 'crosshair';
       toast('在画布上点击圆上一点或圆外一点。', '');
     } else {
-      canvas.style.cursor = 'grab';
+      canvas.style.cursor = 'default';
     }
     updateTangentUI(); draw();
   });
@@ -5984,6 +5999,7 @@ function bindUI() {
   });
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); cancelPending(); });
+  canvas.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
   canvas.addEventListener('dblclick', e => {
     e.preventDefault();
     if (state.mode === 'space') {

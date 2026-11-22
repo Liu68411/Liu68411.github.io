@@ -234,7 +234,7 @@
   .zoom-pill button:hover{background:#f3efe6;color:var(--ink)}
   .zoom-pill span{font-size:9.5px;font-weight:800;color:#8b8272;min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
   .canvas-wrap{position:relative;height:clamp(500px,66vh,690px);background:#fffdf8;overflow:hidden;touch-action:none}
-  #board{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+  #board{display:block;width:100%;height:100%;touch-action:none;cursor:default}
   .canvas-badge{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:7px;background:rgba(255,253,249,.92);border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:10px;font-weight:800;color:#6b6253;box-shadow:0 4px 12px -9px rgba(70,55,25,.5);pointer-events:none;backdrop-filter:blur(5px)}
   .canvas-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--teal)}
   .canvas-badge b{color:var(--ink)}
@@ -762,7 +762,7 @@
       </div>
       <div class="stage-foot">
         <span class="coords" id="coordReadout">x = 0.00 &nbsp;·&nbsp; y = 0.00</span>
-        <span class="foot-hint" id="footHint"><b>提示：</b>拖动平移 · 滚轮缩放 · 双击回原点</span>
+        <span class="foot-hint" id="footHint"><b>提示：</b>中键拖动平移 · 滚轮缩放 · 双击回原点</span>
         <span><span class="kbd">Ctrl+Z</span> 撤回 &nbsp; <span class="kbd">Ctrl+Y</span> 重做 &nbsp; <span class="kbd">Esc</span> 取消</span>
       </div>
     </section>
@@ -874,6 +874,6 @@
 
 <div class="toast" id="toast"></div>
 <div class="js-error" id="jsError"></div>
-<script src="functions-geometry.js?v=20261127"></script>
+<script src="functions-geometry.js?v=20261129"></script>
 </body>
 </html>
