@@ -2557,7 +2557,7 @@ function drawPendingPreview() {
         if (Math.hypot(d.x, d.y) < 1e-9) d = perp(u);
         drawRayWorld(o, { x: o.x + d.x, y: o.y + d.y }, 'rgba(180,83,9,.65)', 1.7, [5, 5], 5.2);
       }
-    } else if (state.tool === 'angle') {
+    } else if (state.tool === 'angle' || state.tool === 'set-alpha') {
       if (p.length === 1) {
         const pa = w2s(a), pc = w2s(cur);
         ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pc.x, pc.y); ctx.stroke();
@@ -2740,53 +2740,29 @@ function transformCoords(p, spec) {
   return { x: p.x, y: p.y };
 }
 
-function polygonAtClick(sp) {
-  const p = hitTestPoint(sp, 12);
-  if (p) {
-    const shapes = state.geom.shapes.filter(s => polygonPoints(s) && s.points.includes(p.id));
-    if (shapes.length) return { shape: shapes[shapes.length - 1], point: p };
+function completeAlphaAngle(refs) {
+  if (!refs || refs.length < 3) return;
+  const [A, O, B] = refs;
+  if (refsClose(A, O) || refsClose(O, B) || refsClose(A, B)) {
+    toast('三个点不能重合', 'warn');
+    return;
   }
-  const s = hitTestShape(sp);
-  if (polygonPoints(s)) return { shape: s, point: null };
-  return null;
-}
-
-function nearestVertexIndex(shape, sp) {
-  const pts = shapePoints(shape);
-  let best = 0, bd = Infinity;
-  pts.forEach((p, i) => {
-    const q = w2s(p), d = Math.hypot(q.x - sp.x, q.y - sp.y);
-    if (d < bd) { bd = d; best = i; }
-  });
-  return best;
-}
-
-function setAlphaForShape(shape, vertexIndex) {
-  if (!shape) return;
-  const old = state.geom.alpha;
-  if (old && old.shapeId === shape.id && old.vertexIndex === vertexIndex) {
-    toast('这个角已经设为 α', 'warn');
+  if (Math.abs(cross(sub(A, O), sub(B, O))) < 1e-4) {
+    toast('三点共线，无法确定一个角', 'warn');
     return;
   }
   pushHistory();
-  state.geom.alpha = { shapeId: shape.id, vertexIndex };
+  const pa = resolveRef(A), po = resolveRef(O), pb = resolveRef(B);
+  let shape = state.geom.shapes.find(s => s.type === 'angle'
+    && s.points[0] === pa.id && s.points[1] === po.id && s.points[2] === pb.id);
+  if (!shape) shape = addShape('angle', [pa, po, pb], 'angle');
+  state.geom.alpha = { shapeId: shape.id, vertexIndex: 1 };
   state.selected = { kind: 'shape', id: shape.id };
-  const info = getAlphaInfo();
+  state.pending = []; state.preview = null;
   updateTransformUI();
   renderAllPanels(); draw(); saveSoon();
+  const info = getAlphaInfo();
   toast(info ? `已取 ${info.label} = ${fmt(info.value, 2)}° 作为 α` : '已设置 α', 'ok');
-}
-
-function setAlphaAtClick(sp) {
-  const angleShape = hitTestShape(sp);
-  if (angleShape && angleShape.type === 'angle') {
-    setAlphaForShape(angleShape, 1);
-    return;
-  }
-  const hit = polygonAtClick(sp);
-  if (!hit) { toast('请点击三角形 / 四边形内部，或一个三点角', 'warn'); return; }
-  const idx = hit.point ? hit.shape.points.indexOf(hit.point.id) : nearestVertexIndex(hit.shape, sp);
-  setAlphaForShape(hit.shape, idx);
 }
 
 function axisLineForShape(s) {
@@ -2887,7 +2863,7 @@ function updateTransformUI() {
     const alphaKind = info.shape.type === 'triangle' ? '三角形内角' : info.shape.type === 'quad' ? '四边形内角' : '三点角';
     readout.innerHTML = `<b>α = ${fmt(info.value, 2)}°</b><span>${esc(info.label)} · ${esc(alphaKind)}</span>`;
   } else {
-    readout.innerHTML = '<span>未设置 · 用「取角 α」点三角形 / 四边形内角或三点角</span>';
+    readout.innerHTML = '<span>未设置 · 用「取角 α」依次点边上一点、顶点、边上一点</span>';
   }
   try {
     const angle = evalAngleExpression(state.rotateExpr);
@@ -3059,7 +3035,7 @@ const TOOL_NAMES = {
   'right-isosceles': '等腰直角三角形', equilateral: '等边三角形', square: '正方形',
   rectangle: '矩形', parallelogram: '平行四边形', rhombus: '菱形', circle: '圆',
   'perp-bisector': '垂直平分线', 'angle-bisector': '角平分线', angle: '三点定角', midpoint: '线段中点',
-  rotate: '旋转变换', reflect: '轴对称', 'set-alpha': '取角 α',
+  rotate: '旋转变换', reflect: '轴对称', 'set-alpha': '取角 α（三点）',
   congruent: '全等标记', similar: '相似标记'
 };
 
@@ -3181,8 +3157,8 @@ function updateHint() {
     return;
   }
   if (state.tool === 'set-alpha') {
-    foot.innerHTML = '<b>提示：</b>点击三角形 / 四边形的内角，把它设为 α';
-    hint.innerHTML = '<b>取角 α：</b>点击三角形的某个内角或四边形顶点附近，系统会记录该角为 α。之后旋转角里的 α 会随该角实时更新。';
+    foot.innerHTML = '<b>提示：</b>取角 α：依次点击边上一点、顶点、边上一点';
+    hint.innerHTML = '<b>取角 α（三点法）：</b>这是唯一的取角方式。依次点击边上一点、顶点、边上一点，第三个点后会直接建立并引用这个角。之后移动三点，α 会实时更新。';
     return;
   }
   const map = {
@@ -3207,7 +3183,7 @@ function updateHint() {
     midpoint: ['点击一条线段直接作中点；也可以依次点击两个点。', '中点是派生点，会随线段端点移动，并用等分刻线标出。'],
     rotate: ['先点击要旋转的点 / 图形，再点击一个点作为旋转中心。', '旋转角支持 α 表达式。默认生成带撇号的旋转像，原图保留。'],
     reflect: ['先点击要变换的点 / 图形，再点击一条直线作为对称轴。', '支持直线、线段、射线、垂直平分线或角平分线作为对称轴。'],
-    'set-alpha': ['点击三角形 / 四边形的内角，或点击三点角，把它设为 α。', 'α 会随该角顶点拖动实时更新，可用于 180°−2α、90°−α 等旋转角。'],
+    'set-alpha': ['依次点击边上一点、顶点、边上一点，第三个点后直接设为 α。', '这是唯一的取角方式。α 会随三点位置实时更新，可用于 180°−2α、90°−α 等旋转角。'],
     congruent: ['依次点击两个三角形，检查并标记全等。', '系统自动寻找顶点对应关系；三组对应边相等时添加相同刻度与角弧。'],
     similar: ['依次点击两个三角形，检查并标记相似。', '系统自动寻找顶点对应关系；对应角相等时添加相同角弧并显示相似比。']
   };
@@ -3465,8 +3441,7 @@ function shapeDetailHTML(s) {
       <div class="math-line">∠${esc(p[0].label + p[1].label + p[2].label)} = ${fmt(value, 3)}°</div>
       <div class="measure-row"><span>顶点</span><b>${esc(p[1].label)} (${fmt(p[1].x, 2)}, ${fmt(p[1].y, 2)})</b></div>
       <div class="measure-row"><span>两边</span><b class="txt">${esc(p[1].label + p[0].label)} / ${esc(p[1].label + p[2].label)}</b></div>
-      <div style="margin-top:8px"><button class="btn" id="setAngleAlpha" ${isAlpha ? 'disabled' : ''} style="width:100%">${isAlpha ? '当前已设为 α' : '把这个角设为 α'}</button></div>
-      <div class="apex-hint">设成 α 后，旋转工具就可以直接使用 180°−2α、90°−α 等含参角度。</div>`;
+      <div class="apex-hint">${isAlpha ? '这个角当前就是 α。' : '用「取角 α」工具依次点击这三个点，即可把它设为 α。'}</div>`;
   }
   if (s.type === 'circle') {
     const p = shapePoints(s);
@@ -3823,7 +3798,16 @@ function handleToolClick(sp) {
     return;
   }
   if (tool === 'set-alpha') {
-    setAlphaAtClick(sp);
+    const ref = snapWorld(sp, false);
+    state.pending.push({ x: ref.x, y: ref.y, pid: ref.pid });
+    if (state.pending.length < 3) {
+      draw();
+      toast(state.pending.length === 1 ? '已选边上一点，请点击顶点。' : '已选顶点，请点击另一边上的点。', '');
+      return;
+    }
+    const refs = state.pending.slice();
+    state.pending = []; state.preview = null;
+    completeAlphaAngle(refs);
     return;
   }
   if (tool === 'rotate' || tool === 'reflect') {
@@ -4197,7 +4181,7 @@ function onPointerMove(e) {
     const changed = (hover && !state.hover) || (!hover && state.hover) || (hover && state.hover && (hover.kind !== state.hover.kind || hover.id !== state.hover.id));
     state.hover = hover;
     canvas.style.cursor = hover ? 'pointer' : state.tool === 'select' ? 'grab' : 'crosshair';
-    if (['select', 'point', 'segment', 'ray', 'line', 'triangle', 'right-triangle', 'isosceles-triangle', 'right-isosceles', 'equilateral', 'square', 'rectangle', 'parallelogram', 'rhombus', 'circle', 'perp-bisector', 'angle-bisector', 'angle', 'midpoint'].includes(state.tool)) {
+    if (['select', 'point', 'segment', 'ray', 'line', 'triangle', 'right-triangle', 'isosceles-triangle', 'right-isosceles', 'equilateral', 'square', 'rectangle', 'parallelogram', 'rhombus', 'circle', 'perp-bisector', 'angle-bisector', 'angle', 'set-alpha', 'midpoint'].includes(state.tool)) {
       state.preview = snapWorld(sp, e.altKey);
       draw();
     } else if (changed) draw();
@@ -5058,11 +5042,6 @@ function bindUI() {
     const qpreset = e.target.closest('[data-quad-angle]');
     if (qpreset) { applyQuadFromUI(parseFloat(qpreset.dataset.quadAngle)); return; }
     if (e.target.closest('#applyQuadAngle')) { applyQuadFromUI(); return; }
-    if (e.target.closest('#setAngleAlpha')) {
-      const sel = state.selected;
-      const s = sel && sel.kind === 'shape' ? getShape(sel.id) : null;
-      if (s && s.type === 'angle') setAlphaForShape(s, 1);
-    }
   });
   $('#selectionBox').addEventListener('keydown', e => {
     if (!e.target) return;

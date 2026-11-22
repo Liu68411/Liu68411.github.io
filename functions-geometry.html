@@ -417,7 +417,7 @@
     <div>
       <div class="kicker">FUNCTION &amp; GEOMETRY STUDIO</div>
       <h1>画函数，<em>也画几何</em></h1>
-      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形作中点、三点定角、旋转、轴对称；三角形和四边形拖动时保持形状，并可输入修改等腰三角形、平行四边形与菱形的内角。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
+      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形作中点、三点定角、旋转、轴对称；三角形和四边形拖动时保持形状，并可输入修改等腰三角形、平行四边形与菱形的内角，并用三点取角 α。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
     </div>
     <div class="hero-side">
       <div><i></i>三种画布：平面 / 空间 / 空白</div>
@@ -606,7 +606,7 @@
               <button class="tool" data-tool="reflect" title="轴对称：先选图形，再选对称轴">
                 <svg viewBox="0 0 24 24"><path d="M12 2v20" stroke-dasharray="3 2"/><path d="M9 6L4 12l5 6V6zM15 6l5 6-5 6V6z"/></svg><span>轴对称</span>
               </button>
-              <button class="tool" data-tool="set-alpha" title="取角 α：点击已有三角形或四边形的内角">
+              <button class="tool" data-tool="set-alpha" title="取角 α：依次点击边上一点、顶点、边上一点">
                 <svg viewBox="0 0 24 24"><path d="M3 20L14 5l7 15"/><path d="M8 14a5 5 0 015 2"/><text x="14" y="15" font-size="7" fill="currentColor" stroke="none" font-family="Georgia,serif" font-style="italic">α</text></svg><span>取角 α</span>
               </button>
             </div>
@@ -628,7 +628,7 @@
             <h4>旋转 / 轴对称 <span class="badge">TRANSFORM</span></h4>
             <div class="alpha-line">
               <span class="alpha-mark">α</span>
-              <div class="alpha-readout" id="alphaReadout"><span>未设置 · 用「取角 α」点三角形 / 四边形内角或三点角</span></div>
+              <div class="alpha-readout" id="alphaReadout"><span>未设置 · 用「取角 α」依次点边上一点、顶点、边上一点</span></div>
               <button class="btn" id="setAlphaBtn" style="padding:4px 7px;font-size:9px">取角</button>
               <button class="alpha-clear" id="clearAlpha" title="清除 α">×</button>
             </div>
