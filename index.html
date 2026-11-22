@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>交互实验室 · 物理与微积分</title>
+<meta name="description" content="交互实验室：初中物理动态演示、每日求导与微积分练习，以及可画函数、求导积分、生成圆锥曲线和标记全等相似的函数与几何画板。">
+<title>交互实验室 · 物理、微积分与函数几何</title>
 <style>
   :root{
     --ink:#1f2937;
@@ -40,8 +41,9 @@
 
   .hero{padding:10px 0 14px}
   .kicker{font-size:11px;font-weight:800;letter-spacing:.22em;color:var(--teal)}
-  h1{font-size:clamp(38px,6vw,56px);line-height:1.12;letter-spacing:-.035em;margin:12px 0 14px;font-weight:800;max-width:820px}
+  h1{font-size:clamp(38px,6vw,56px);line-height:1.12;letter-spacing:-.035em;margin:12px 0 14px;font-weight:800;max-width:820px;text-wrap:balance}
   h1 em{font-style:normal;background:linear-gradient(115deg,#0f766e 5%,#2563eb 50%,#7c3aed 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero-phrase{white-space:nowrap}
   .lead{max-width:660px;margin:0;color:#5b5344;font-size:15px;line-height:1.85}
   .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
   .pill{font-size:12px;font-weight:700;color:#5b5344;background:rgba(255,253,249,.92);border:1px solid var(--line);padding:7px 12px;border-radius:999px}
@@ -78,6 +80,21 @@
   .card:hover .go .arrow{background:var(--teal);color:#fff;transform:translateX(3px)}
   .card.math:hover .go .arrow{background:var(--violet);color:#fff}
 
+  .card.feature{grid-column:1/-1;flex-direction:row;align-items:stretch;border-color:#d9d0f5}
+  .card.feature:hover{border-color:#b9a8f5;box-shadow:0 38px 80px -46px rgba(76,55,140,.6)}
+  .feature .thumb{width:55%;height:auto;min-height:292px;flex:none;background:#f3f0fa}
+  .feature .thumb img{height:100%;object-fit:cover;object-position:center}
+  .feature .badge{left:14px;top:14px;background:#fff;border-color:#ddd6fe;color:var(--violet);font-size:10px;padding:5px 9px}
+  .feature .body{width:45%;padding:26px 28px 24px;gap:9px;justify-content:center}
+  .feature h3{font-size:26px;letter-spacing:-.025em}
+  .feature .desc{font-size:13px;line-height:1.8}
+  .feature .tags span{font-size:10.5px}
+  .feature .points{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin:5px 0 2px}
+  .feature .points span{font-size:11px;color:#5b5344;display:flex;align-items:center;gap:6px}
+  .feature .points i{width:5px;height:5px;border-radius:50%;background:var(--violet);flex:none}
+  .feature .go{font-size:13px;padding-top:6px}
+  .feature .go .arrow{width:32px;height:32px}
+
   .note{margin-top:26px;background:rgba(255,253,249,.72);border:1px dashed #d6cbb6;border-radius:16px;padding:14px 18px;font-size:12px;color:#8b8272;line-height:1.75;display:flex;gap:10px;flex-wrap:wrap}
   .note b{color:#5b5344}
 
@@ -88,8 +105,17 @@
     .page{padding:18px 16px 46px}
     .grid{grid-template-columns:1fr}
     .thumb{height:170px}
+    .card.feature{flex-direction:column}
+    .feature .thumb{width:100%;min-height:0;height:178px}
+    .feature .body{width:100%;padding:18px}
+    .feature h3{font-size:22px}
+    .feature .points{grid-template-columns:1fr}
     h1{font-size:38px}
     .nav nav{display:none}
+  }
+  @media (max-width:520px){
+    h1{font-size:32px}
+    .lead{font-size:14px}
   }
 </style>
 </head>
@@ -99,6 +125,7 @@
   <header class="nav">
     <div class="brand"><span class="logo">∑</span>交互实验室</div>
     <nav>
+      <a href="#studio">函数与几何</a>
       <a href="#physics">物理演示</a>
       <a href="#daily">每日一练</a>
     </nav>
@@ -106,13 +133,37 @@
 
   <section class="hero">
     <div class="kicker">INTERACTIVE LAB</div>
-    <h1>一个入口，<em>物理与微积分</em>都能练</h1>
-    <p class="lead">左边是电路与电磁继电器的动态演示，右边是每天 5 道求导 / 积分题。全部在浏览器里直接操作，输入答案就能判分，不用登录。</p>
+    <h1>一个入口，<span class="hero-phrase"><em>物理与数学</em>都能练</span></h1>
+    <p class="lead">物理电路可以拖动演示，微积分可以每天刷题；新加的函数与几何画板还能画函数、求导积分、生成圆锥曲线，并完成全等与相似的几何研究。全部在浏览器里直接操作，不用登录。</p>
     <div class="pills">
       <span class="pill">2 个物理演示</span>
       <span class="pill">每天 10 道数学题</span>
-      <span class="pill">输入判分 · 难度自适应</span>
-      <span class="pill">手机 / 平板可用</span>
+      <span class="pill">函数 / 圆锥 / 尺规作图</span>
+      <span class="pill">全等 &amp; 相似自动标记</span>
+    </div>
+  </section>
+
+  <section class="section" id="studio">
+    <div class="sec-head math"><span class="dot"></span><h2>函数与几何</h2><span>新 · 可交互数学研究画板</span></div>
+    <div class="grid">
+      <a class="card math feature" href="functions-geometry.html">
+        <div class="thumb">
+          <span class="badge violet">NEW · MATH STUDIO</span>
+          <img src="preview-functions.png" alt="函数与几何实验室预览">
+        </div>
+        <div class="body">
+          <div class="tags"><span>平面 / 空间 / 空白</span><span>函数图像</span><span>求导 · 积分</span><span>圆锥曲线</span><span>几何作图</span></div>
+          <h3>函数与几何实验室</h3>
+          <p class="desc">输入函数直接画图，查看导函数、切线与积分区域；用参数生成圆、椭圆、抛物线和双曲线。几何侧支持点、三种线、五类三角形、四类四边形、圆、垂直平分线与角平分线，并能自动标记全等三角形和相似三角形。</p>
+          <div class="points">
+            <span><i></i>平面 / 空间直角坐标系</span>
+            <span><i></i>空白平面自由作图</span>
+            <span><i></i>拖动顶点实时测量</span>
+            <span><i></i>一键导出 PNG</span>
+          </div>
+          <div class="go">打开画板 <span class="arrow">→</span></div>
+        </div>
+      </a>
     </div>
   </section>
 
@@ -164,10 +215,10 @@
     </div>
   </section>
 
-  <div class="note"><b>使用提示：</b>数学题目每天 00:00 自动更新；难度和完成情况保存在当前浏览器。两个物理演示建议横屏查看，手机端示意图可左右滑动。</div>
+  <div class="note"><b>使用提示：</b>数学题目每天 00:00 自动更新；难度、完成情况和几何作图保存在当前浏览器。函数与几何画板建议横屏使用，两个物理演示在手机端可左右滑动示意图。</div>
 
   <footer>
-    <span><b>交互实验室</b> · 物理演示 + 每日一练</span>
+    <span><b>交互实验室</b> · 物理演示 + 每日一练 + 函数与几何</span>
     <span>GitHub Pages 静态站点 · 无需登录</span>
   </footer>
 </div>

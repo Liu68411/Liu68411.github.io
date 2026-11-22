@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="description" content="可交互的函数与几何实验室：平面 / 空间 / 空白画布，函数图像、求导、积分，圆、椭圆、抛物线与双曲线，三角形、四边形、圆与尺规作图，以及全等与相似标记。">
+<title>函数与几何实验室 · 交互实验室</title>
+<style>
+  :root{
+    --ink:#1f2937;
+    --muted:#6b7280;
+    --soft:#8b8272;
+    --paper:#f6f4ee;
+    --card:#fffdf9;
+    --card2:#fbf8f0;
+    --line:#e6dfd2;
+    --line2:#d9d0bd;
+    --teal:#0f766e;
+    --teal-soft:#e6f4f1;
+    --violet:#7c3aed;
+    --violet-soft:#f0eafe;
+    --blue:#2563eb;
+    --blue-soft:#eaf1ff;
+    --amber:#b45309;
+    --amber-soft:#fff4df;
+    --rose:#be123c;
+    --shadow:0 26px 60px -44px rgba(70,55,25,.6);
+    --shadow2:0 14px 36px -28px rgba(70,55,25,.55);
+    --radius:20px;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:var(--ink);line-height:1.6;
+    background:
+      radial-gradient(900px 520px at 6% -10%, #d9f3ef 0%, rgba(217,243,239,0) 58%),
+      radial-gradient(850px 480px at 100% 0%, #ede9fe 0%, rgba(237,233,254,0) 55%),
+      radial-gradient(700px 420px at 60% 110%, #fff1d6 0%, rgba(255,241,214,0) 60%),
+      var(--paper);
+    -webkit-font-smoothing:antialiased;
+  }
+  button,input,select{font:inherit}
+  button{color:inherit}
+  .page{max-width:1480px;margin:0 auto;padding:20px 24px 52px}
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:2px 0 18px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px;text-decoration:none;color:var(--ink)}
+  .logo{width:34px;height:34px;border-radius:11px;background:linear-gradient(140deg,#0f766e,#7c3aed);color:#fff;display:grid;place-items:center;font-family:"Cambria Math",Georgia,serif;font-size:18px;box-shadow:0 10px 20px -10px rgba(80,70,180,.7)}
+  .nav nav{display:flex;gap:4px;flex-wrap:wrap}
+  .nav nav a{font-size:13px;font-weight:700;color:#5b5344;text-decoration:none;padding:7px 12px;border-radius:999px;transition:.18s}
+  .nav nav a:hover{background:#fff;color:var(--teal);box-shadow:0 2px 8px rgba(70,55,25,.08)}
+  .nav nav a.active{background:#fff;color:var(--violet);box-shadow:0 2px 8px rgba(70,55,25,.08)}
+  .nav .back{font-size:12px;font-weight:700;color:var(--soft);text-decoration:none;padding:7px 10px;border-radius:999px}
+  .nav .back:hover{color:var(--teal);background:#fff}
+
+  .hero{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;padding:4px 2px 24px}
+  .kicker{font-size:11px;font-weight:800;letter-spacing:.22em;color:var(--violet)}
+  h1{font-size:clamp(32px,4.2vw,48px);line-height:1.12;letter-spacing:-.03em;margin:8px 0 10px;font-weight:800}
+  h1 em{font-style:normal;background:linear-gradient(115deg,#0f766e 5%,#2563eb 48%,#7c3aed 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{max-width:690px;margin:0;color:#5b5344;font-size:13.5px;line-height:1.85}
+  .hero-side{display:flex;flex-direction:column;gap:7px;min-width:235px;padding:13px 16px;border:1px solid var(--line);border-radius:15px;background:rgba(255,253,249,.72);box-shadow:var(--shadow2)}
+  .hero-side div{display:flex;align-items:center;gap:8px;font-size:11.5px;color:#6b6253;font-weight:600;white-space:nowrap}
+  .hero-side i{width:6px;height:6px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px rgba(15,118,110,.1)}
+  .hero-side div:nth-child(2) i{background:var(--violet);box-shadow:0 0 0 3px rgba(124,58,237,.1)}
+  .hero-side div:nth-child(3) i{background:var(--amber);box-shadow:0 0 0 3px rgba(180,83,9,.1)}
+
+  .modebar{display:flex;align-items:center;gap:8px;background:rgba(255,253,249,.88);border:1px solid var(--line);border-radius:16px;padding:7px;box-shadow:var(--shadow2);margin-bottom:16px;flex-wrap:wrap}
+  .mode-btn{display:flex;align-items:center;gap:9px;border:0;background:transparent;border-radius:11px;padding:9px 14px;cursor:pointer;text-align:left;transition:.18s;flex:1;min-width:160px}
+  .mode-btn:hover{background:#f6f2e9}
+  .mode-btn.active{background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;box-shadow:0 10px 22px -14px rgba(15,118,110,.9)}
+  .mode-btn svg{width:23px;height:23px;flex:none;opacity:.9}
+  .mode-btn b{display:block;font-size:12.5px;font-weight:800;line-height:1.3}
+  .mode-btn small{display:block;font-size:10px;opacity:.62;letter-spacing:.02em;margin-top:1px}
+  .mode-btn.active small{opacity:.72}
+  .mode-spacer{flex:1}
+  .mode-meta{display:flex;align-items:center;gap:8px;padding:0 10px;font-size:11px;color:var(--soft);white-space:nowrap}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.13)}
+  .mode-meta b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+  .studio{display:grid;grid-template-columns:332px minmax(0,1fr) 296px;gap:15px;align-items:start}
+  .panel{background:rgba(255,253,249,.96);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px 0}
+  .panel-head h2{font-size:13px;letter-spacing:.06em;margin:0;font-weight:800;color:#4b5563}
+  .panel-head .tag{font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--teal);background:var(--teal-soft);border:1px solid #c8e8e2;padding:2px 7px;border-radius:5px}
+  .tabs{display:flex;gap:3px;padding:10px 12px 0;border-bottom:1px solid var(--line);margin-top:5px}
+  .tab{position:relative;border:0;background:transparent;color:var(--soft);font-size:12.5px;font-weight:800;padding:9px 9px 11px;cursor:pointer;border-radius:8px 8px 0 0;transition:.16s}
+  .tab:hover{color:var(--ink);background:#f8f4eb}
+  .tab.active{color:var(--violet)}
+  .tab.active::after{content:"";position:absolute;left:9px;right:9px;bottom:-1px;height:2px;border-radius:2px;background:var(--violet)}
+  .tab-body{padding:15px 15px 17px;max-height:calc(68vh + 92px);overflow:auto;scrollbar-width:thin;scrollbar-color:#d8cfbd transparent}
+  .tab-body::-webkit-scrollbar{width:7px}
+  .tab-body::-webkit-scrollbar-thumb{background:#ddd4c3;border-radius:99px}
+  .tab-pane{display:none}
+  .tab-pane.active{display:block}
+  .field-label{font-size:11px;font-weight:800;color:var(--soft);letter-spacing:.03em;margin:0 0 6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .field-label span{font-weight:600;color:#aaa08b;letter-spacing:0;font-size:10px}
+  .expr-row{display:flex;align-items:center;gap:7px;background:#fff;border:1.5px solid var(--line2);border-radius:10px;padding:3px 4px 3px 11px;transition:.18s}
+  .expr-row:focus-within{border-color:var(--violet);box-shadow:0 0 0 3px var(--violet-soft)}
+  .expr-row .fx{font-family:"Cambria Math","STIX Two Math",Georgia,serif;font-size:14px;color:#7c6b55;font-style:italic;flex:none}
+  .expr-row input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-family:"Cambria Math","STIX Two Math",Georgia,serif;font-size:14.5px;color:var(--ink);padding:8px 0}
+  .expr-row input::placeholder{font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:11px;color:#b8ad98}
+  .mini-btn{border:0;background:var(--violet);color:#fff;font-size:11px;font-weight:800;padding:7px 10px;border-radius:7px;cursor:pointer;flex:none}
+  .mini-btn:hover{background:#6d28d9}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+  .chip{border:1px solid #e4dccd;background:#fbf8f1;color:#776c59;font-family:"Cambria Math",Georgia,serif;font-size:10.5px;padding:3px 7px;border-radius:6px;cursor:pointer;transition:.15s}
+  .chip:hover{border-color:#c4b5fd;background:#f6f2ff;color:#6d28d9}
+  .primary{width:100%;border:0;border-radius:10px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;font-size:12.5px;font-weight:800;padding:10px 14px;cursor:pointer;box-shadow:0 10px 20px -14px rgba(124,58,237,.9);transition:.18s;margin-top:10px}
+  .primary:hover{filter:brightness(1.05);transform:translateY(-1px)}
+  .primary.teal{background:linear-gradient(135deg,#0f766e,#0d9488);box-shadow:0 10px 20px -14px rgba(15,118,110,.9)}
+  .primary.amber{background:linear-gradient(135deg,#b45309,#d97706);box-shadow:0 10px 20px -14px rgba(180,83,9,.8)}
+  .primary:active{transform:translateY(0)}
+  .subcard{border:1px solid var(--line);background:var(--card2);border-radius:12px;padding:11px;margin-top:12px}
+  .subcard h4{margin:0 0 8px;font-size:11.5px;font-weight:800;display:flex;align-items:center;gap:6px;color:#4b5563}
+  .subcard h4 .badge{font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--violet);background:var(--violet-soft);border-radius:4px;padding:1px 5px}
+  .subcard h4 .badge.teal{color:var(--teal);background:var(--teal-soft)}
+  .inline-fields{display:flex;gap:7px;align-items:flex-end}
+  .inline-fields .f{flex:1;min-width:0}
+  .inline-fields label{display:block;font-size:9.5px;font-weight:800;color:#9a8f7a;margin-bottom:3px}
+  .inline-fields input,.inline-fields select{width:100%;border:1px solid #ddd3c0;border-radius:7px;background:#fff;padding:7px 8px;font-size:12px;font-family:"Cambria Math",Georgia,serif;outline:0;color:var(--ink)}
+  .inline-fields input:focus,.inline-fields select:focus{border-color:var(--violet);box-shadow:0 0 0 2px var(--violet-soft)}
+  .inline-fields .go-sq{border:0;background:#fff;border:1px solid #ddd3c0;border-radius:7px;width:34px;height:33px;cursor:pointer;color:var(--violet);font-weight:800;flex:none}
+  .inline-fields .go-sq:hover{border-color:var(--violet);background:var(--violet-soft)}
+  .checks{display:flex;gap:4px 12px;flex-wrap:wrap;margin-top:8px}
+  .check{display:flex;align-items:center;gap:5px;font-size:10.5px;color:#746a59;cursor:pointer;user-select:none}
+  .check input{width:13px;height:13px;accent-color:var(--violet);margin:0}
+  .formula-card{border:1px dashed #d8cbb6;border-radius:10px;padding:9px 10px;background:#fffcf6;margin-top:10px;font-size:11px;color:#7a6f5c;line-height:1.75}
+  .formula-card b{color:var(--ink)}
+  .formula-card .mono{font-family:"Cambria Math","STIX Two Math",Georgia,serif;font-size:12.5px}
+
+  .tool-group{margin-bottom:12px}
+  .tool-group:last-of-type{margin-bottom:0}
+  .group-label{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:.1em;color:#9a8f7a;margin:0 0 6px}
+  .group-label::after{content:"";height:1px;background:var(--line);flex:1}
+  .tool-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  .tool-grid.five{grid-template-columns:repeat(5,1fr)}
+  .tool{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid #e8e0d1;background:#fffdf9;border-radius:9px;padding:7px 2px 6px;cursor:pointer;color:#6b6253;transition:.15s;min-height:52px}
+  .tool svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .tool span{font-size:9px;font-weight:700;line-height:1.2;text-align:center;letter-spacing:-.02em}
+  .tool:hover{border-color:#b8ddd6;background:#f5fbf9;color:var(--teal);transform:translateY(-1px)}
+  .tool.active{border-color:var(--teal);background:var(--teal-soft);color:#0b5f58;box-shadow:0 0 0 2px rgba(15,118,110,.1)}
+  .tool.mark:hover{border-color:#f1cd9b;background:#fff9ee;color:var(--amber)}
+  .tool.mark.active{border-color:var(--amber);background:var(--amber-soft);color:#92400e;box-shadow:0 0 0 2px rgba(180,83,9,.1)}
+  .tool:disabled{opacity:.4;cursor:not-allowed}
+  .geom-extra{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #ddd3c0;background:#fff;color:#5b5344;font-size:11px;font-weight:800;padding:7px 10px;border-radius:8px;cursor:pointer;transition:.16s}
+  .btn:hover{border-color:var(--teal);color:var(--teal);background:#fbfffd}
+  .btn.soft{background:#f8f4eb;border-color:#e8e0d1}
+  .btn.danger:hover{border-color:#fecdd3;color:var(--rose);background:#fff7f8}
+  .toggle-row{display:flex;gap:4px 14px;flex-wrap:wrap;margin:10px 0 11px;padding:9px 10px;background:#fbf8f1;border:1px solid var(--line);border-radius:9px}
+  .toggle-row .check{font-size:10.5px}
+  .hint-box{display:flex;gap:8px;padding:9px 10px;border-radius:9px;background:#f7f3ff;border:1px solid #e6dcfb;color:#6b5b8a;font-size:10.5px;line-height:1.65;margin-top:10px}
+  .hint-box b{color:#5b21b6}
+  .hint-box.teal{background:#f3fbf9;border-color:#d3ece7;color:#4d6c66}
+  .hint-box.teal b{color:var(--teal)}
+  .hint-box.amber{background:#fff9ed;border-color:#f5e2bd;color:#7c613a}
+  .hint-box.amber b{color:#92400e}
+
+  .conic-types{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:#f3eee4;border:1px solid #e6dfd2;padding:3px;border-radius:9px;margin-bottom:11px}
+  .conic-type{border:0;background:transparent;border-radius:6px;padding:6px 2px;font-size:10.5px;font-weight:800;color:#8b8272;cursor:pointer;transition:.15s}
+  .conic-type:hover{color:var(--ink)}
+  .conic-type.active{background:#fff;color:var(--violet);box-shadow:0 1px 5px rgba(70,55,25,.1)}
+  .param-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .param-grid .f{min-width:0}
+  .param-grid label{display:block;font-size:9.5px;font-weight:800;color:#9a8f7a;margin-bottom:3px}
+  .param-grid input,.param-grid select{width:100%;border:1px solid #ddd3c0;border-radius:7px;background:#fff;padding:7px 8px;font-size:12px;font-family:"Cambria Math",Georgia,serif;outline:0}
+  .param-grid input:focus,.param-grid select:focus{border-color:var(--violet);box-shadow:0 0 0 2px var(--violet-soft)}
+  .param-grid .wide{grid-column:1/-1}
+
+  .stage{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;min-width:0}
+  .stage-toolbar{display:flex;align-items:center;gap:5px;padding:8px 10px;border-bottom:1px solid var(--line);background:rgba(255,253,249,.9);flex-wrap:wrap;min-height:49px}
+  .tool-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;border:1px solid transparent;background:transparent;color:#6b6253;font-size:10.5px;font-weight:800;padding:6px 8px;border-radius:7px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .tool-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .tool-btn:hover:not(:disabled){background:#f3efe6;border-color:#e8e0d1;color:var(--ink)}
+  .tool-btn:disabled{opacity:.32;cursor:default}
+  .tool-btn.warn:hover{color:var(--rose);background:#fff7f8;border-color:#fecdd3}
+  .tb-sep{width:1px;height:19px;background:var(--line);margin:0 2px}
+  .tb-grow{flex:1}
+  .zoom-pill{display:flex;align-items:center;gap:1px;border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
+  .zoom-pill button{border:0;background:transparent;width:25px;height:25px;cursor:pointer;color:#6b6253;font-size:13px;font-weight:700}
+  .zoom-pill button:hover{background:#f3efe6;color:var(--ink)}
+  .zoom-pill span{font-size:9.5px;font-weight:800;color:#8b8272;min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+  .canvas-wrap{position:relative;height:clamp(500px,66vh,690px);background:#fffdf8;overflow:hidden;touch-action:none}
+  #board{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+  .canvas-badge{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:7px;background:rgba(255,253,249,.92);border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:10px;font-weight:800;color:#6b6253;box-shadow:0 4px 12px -9px rgba(70,55,25,.5);pointer-events:none;backdrop-filter:blur(5px)}
+  .canvas-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--teal)}
+  .canvas-badge b{color:var(--ink)}
+  .canvas-badge.space .dot{background:var(--violet)}
+  .canvas-badge.blank .dot{background:var(--amber)}
+  .canvas-legend{position:absolute;right:12px;bottom:12px;background:rgba(255,253,249,.93);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:9.5px;color:#7a6f5c;line-height:1.8;pointer-events:none;box-shadow:0 4px 12px -9px rgba(70,55,25,.5);max-width:210px;backdrop-filter:blur(5px)}
+  .canvas-legend[hidden]{display:none}
+  .canvas-legend i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:5px;border-radius:2px}
+  .canvas-legend .dash{height:0;border-top:2px dashed currentColor;background:transparent}
+  .stage-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 12px;border-top:1px solid var(--line);background:#fbf8f2;font-size:10px;color:#8b8272;flex-wrap:wrap;min-height:35px}
+  .stage-foot .coords{font-family:"Cambria Math","STIX Two Math",Georgia,serif;font-variant-numeric:tabular-nums;color:#5b5344;white-space:nowrap}
+  .stage-foot .foot-hint{display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stage-foot .foot-hint b{color:#5b5344}
+  .kbd{display:inline-block;border:1px solid #d9cfbd;border-bottom-width:2px;border-radius:4px;background:#fff;padding:0 4px;font-size:8.5px;font-family:ui-monospace,monospace;line-height:1.5;color:#736856}
+
+  .right-panel .panel-head{padding-bottom:8px}
+  .right-body{padding:10px 13px 15px;max-height:calc(66vh + 150px);overflow:auto;scrollbar-width:thin;scrollbar-color:#d8cfbd transparent}
+  .right-body::-webkit-scrollbar{width:6px}
+  .right-body::-webkit-scrollbar-thumb{background:#ddd4c3;border-radius:99px}
+  .r-sec{border-top:1px solid var(--line);padding-top:11px;margin-top:11px}
+  .r-sec:first-child{border-top:0;padding-top:0;margin-top:0}
+  .r-sec-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+  .r-sec-head h3{margin:0;font-size:10px;font-weight:800;letter-spacing:.1em;color:#9a8f7a}
+  .r-sec-head span{font-size:9px;font-weight:700;color:#b0a58f;font-variant-numeric:tabular-nums}
+  .analysis-empty{font-size:10.5px;color:#a89d88;line-height:1.7;padding:10px;border:1px dashed #ded4c2;border-radius:8px;background:#fffcf6}
+  .analysis-title{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:#4b5563;margin-bottom:7px}
+  .analysis-title .tag{font-size:8.5px;font-weight:800;letter-spacing:.08em;padding:1px 5px;border-radius:4px;background:var(--violet-soft);color:var(--violet)}
+  .analysis-title .tag.teal{background:var(--teal-soft);color:var(--teal)}
+  .analysis-title .tag.amber{background:var(--amber-soft);color:var(--amber)}
+  .math-line{font-family:"Cambria Math","STIX Two Math",Georgia,serif;font-size:14px;line-height:1.75;color:var(--ink);word-break:break-word}
+  .math-line small{font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:9.5px;color:#9a8f7a}
+  .metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:7px}
+  .metric{border:1px solid #eee6d8;background:#fffcf6;border-radius:7px;padding:5px 7px;min-width:0}
+  .metric span{display:block;font-size:8.5px;color:#a89d88;font-weight:700;margin-bottom:1px}
+  .metric b{display:block;font-size:11.5px;color:#3f3a31;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric b.math{font-family:"Cambria Math",Georgia,serif;font-weight:700}
+  .obj-list{display:flex;flex-direction:column;gap:3px}
+  .obj-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:7px;border:1px solid transparent;cursor:pointer;transition:.14s;min-width:0}
+  .obj-item:hover{background:#f7f3ea;border-color:#eee5d5}
+  .obj-item.selected{background:#eef8f6;border-color:#c9e8e2}
+  .obj-item.hidden{opacity:.45}
+  .obj-swatch{width:7px;height:7px;border-radius:50%;flex:none;background:var(--teal)}
+  .obj-swatch.line{height:2px;border-radius:2px;width:13px}
+  .obj-swatch.square{border-radius:2px;width:8px;height:8px}
+  .obj-name{font-size:10px;font-weight:700;color:#5b5344;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+  .obj-name small{font-weight:600;color:#a89d88;font-family:"Cambria Math",Georgia,serif;font-size:9px}
+  .obj-actions{display:flex;gap:1px;flex:none}
+  .icon-btn{border:0;background:transparent;width:19px;height:19px;border-radius:4px;cursor:pointer;color:#a89d88;display:grid;place-items:center;padding:0}
+  .icon-btn:hover{background:#fff;color:var(--teal)}
+  .icon-btn.del:hover{color:var(--rose);background:#fff5f6}
+  .icon-btn svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .empty-list{font-size:10px;color:#b0a58f;padding:8px;border:1px dashed #e2d9c8;border-radius:7px;text-align:center}
+  .sel-title{font-size:12px;font-weight:800;margin-bottom:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .sel-title .pill{font-size:8.5px;padding:1px 5px;border-radius:4px;background:#f1ecdf;color:#8b8272;font-weight:800}
+  .sel-sub{font-size:9.5px;color:#a89d88;margin-bottom:7px;line-height:1.55}
+  .measure-row{display:flex;justify-content:space-between;gap:8px;font-size:9.5px;color:#746a59;padding:3px 0;border-bottom:1px dotted #eee6d8}
+  .measure-row:last-child{border-bottom:0}
+  .measure-row b{color:#3f3a31;font-family:"Cambria Math",Georgia,serif;font-size:10.5px;font-weight:700;text-align:right}
+  .measure-row b.txt{font-family:inherit;font-size:9.5px}
+  .mark-note{margin-top:7px;padding:7px 8px;border-radius:6px;font-size:9px;line-height:1.6;background:#edf9f4;color:#166534;border:1px solid #c9ecda}
+  .mark-note.sim{background:#fff8e9;color:#92400e;border-color:#f3ddae}
+
+  footer{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:24px;padding-top:14px;font-size:11px;color:#9a8f7a}
+  footer b{color:#64748b;font-weight:600}
+  footer a{color:var(--violet);text-decoration:none;font-weight:700}
+  footer a:hover{text-decoration:underline}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,18px);background:#1f2937;color:#fff;font-size:12px;font-weight:600;padding:10px 16px;border-radius:10px;box-shadow:0 18px 40px -20px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:.22s;z-index:60;max-width:min(90vw,460px);text-align:center;line-height:1.55}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast.ok{background:#115e59}
+  .toast.warn{background:#92400e}
+  .toast.bad{background:#991b1b}
+  .js-error{position:fixed;inset:0;background:#fff;color:#991b1b;padding:30px;font-family:monospace;z-index:9999;display:none;white-space:pre-wrap;overflow:auto}
+
+  .space-panel{padding:15px}
+  .space-panel[hidden]{display:none}
+  .axis-legend{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:10px}
+  .axis-legend div{background:#fffcf6;border:1px solid #eee6d8;border-radius:7px;padding:6px;text-align:center;font-size:9px;color:#8b8272}
+  .axis-legend b{display:block;font-family:"Cambria Math",Georgia,serif;font-size:14px;line-height:1.2}
+  .axis-legend .x b{color:#dc2626}.axis-legend .y b{color:#16a34a}.axis-legend .z b{color:#2563eb}
+  .space-points{display:flex;flex-direction:column;gap:3px;margin-top:8px}
+  .space-point{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:9.5px;color:#5b5344;padding:4px 6px;border-radius:5px;background:#fffcf6;border:1px solid #eee6d8}
+  .space-point b{font-family:"Cambria Math",Georgia,serif;font-weight:700;color:#3f3a31}
+  .space-point button{border:0;background:transparent;color:#b0a58f;cursor:pointer;font-size:12px;line-height:1}
+  .space-point button:hover{color:var(--rose)}
+
+  @media (max-width:1280px){
+    .studio{grid-template-columns:318px minmax(0,1fr)}
+    .right-panel{grid-column:1/-1}
+    .right-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 18px;max-height:none}
+    .right-panel .r-sec{border-top:0;padding-top:0;margin-top:0}
+    .right-panel .r-sec + .r-sec{border-left:1px solid var(--line);padding-left:16px}
+    .tab-body{max-height:calc(66vh + 90px)}
+  }
+  @media (max-width:900px){
+    .page{padding:15px 13px 38px}
+    .hero{flex-direction:column;align-items:flex-start;gap:12px}
+    .hero-side{flex-direction:row;flex-wrap:wrap;min-width:0;padding:10px 13px}
+    .studio{grid-template-columns:1fr}
+    .stage{order:1}
+    .left-panel{order:2}
+    .right-panel{order:3}
+    .tab-body{max-height:none}
+    .canvas-wrap{height:clamp(380px,58vh,530px)}
+    .right-body{grid-template-columns:1fr;gap:0}
+    .right-panel .r-sec + .r-sec{border-left:0;border-top:1px solid var(--line);padding-left:0;padding-top:11px;margin-top:11px}
+    .nav nav{display:none}
+    .mode-meta{display:none}
+    .mode-btn{min-width:0;padding:8px 9px}
+    .mode-btn small{display:none}
+  }
+  @media (max-width:520px){
+    .hero-side{display:none}
+    .tool-grid{grid-template-columns:repeat(4,1fr)}
+    .stage-toolbar{gap:2px}
+    .tool-btn span{display:none}
+    .tool-btn{padding:6px 7px}
+    .canvas-wrap{height:430px}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="nav">
+    <a class="brand" href="index.html"><span class="logo">∑</span>交互实验室</a>
+    <nav>
+      <a href="index.html#physics">物理演示</a>
+      <a href="index.html#daily">每日一练</a>
+      <a class="active" href="functions-geometry.html">函数与几何</a>
+    </nav>
+    <a class="back" href="index.html">← 返回首页</a>
+  </header>
+
+  <section class="hero">
+    <div>
+      <div class="kicker">FUNCTION &amp; GEOMETRY STUDIO</div>
+      <h1>画函数，<em>也画几何</em></h1>
+      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形做可拖动的几何研究。</p>
+    </div>
+    <div class="hero-side">
+      <div><i></i>三种画布：平面 / 空间 / 空白</div>
+      <div><i></i>函数图像 · 求导 · 定积分</div>
+      <div><i></i>全等与相似自动标记</div>
+    </div>
+  </section>
+
+  <div class="modebar" role="tablist" aria-label="画布类型">
+    <button class="mode-btn active" data-mode="plane" role="tab" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4v16h16"/><path d="M7 7h10v10"/><path d="M4 20l3-3"/></svg>
+      <span><b>平面直角坐标系</b><small>二维函数与几何画布</small></span>
+    </button>
+    <button class="mode-btn" data-mode="space" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 19V7l8-4 6 4v12l-6 3-8-3z"/><path d="M5 7l8 4 6-4M13 11v11"/></svg>
+      <span><b>空间直角坐标系</b><small>旋转观察 x / y / z 轴</small></span>
+    </button>
+    <button class="mode-btn" data-mode="blank" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 16l3-5 2 3 3-4"/></svg>
+      <span><b>空白平面</b><small>无网格的自由作图</small></span>
+    </button>
+    <div class="mode-spacer"></div>
+    <div class="mode-meta"><span class="live-dot"></span>状态 <b id="modeStatus">平面 · 函数模式</b></div>
+  </div>
+
+  <div class="studio">
+    <aside class="panel left-panel">
+      <div class="panel-head"><h2>研究工具</h2><span class="tag" id="panelTag">代数</span></div>
+      <div class="tabs" id="mainTabs" role="tablist">
+        <button class="tab active" data-tab="function" role="tab">函数</button>
+        <button class="tab" data-tab="conic" role="tab">圆锥曲线</button>
+        <button class="tab" data-tab="geometry" role="tab">几何作图</button>
+      </div>
+
+      <div class="tab-body" id="tabBody">
+        <section class="tab-pane active" data-pane="function">
+          <div class="field-label">函数表达式 <span>支持 sin / cos / ln / sqrt / abs</span></div>
+          <div class="expr-row">
+            <span class="fx">f(x) =</span>
+            <input id="exprInput" value="x^2 - 2x - 1" spellcheck="false" autocomplete="off" aria-label="函数表达式">
+            <button class="mini-btn" id="plotBtn">绘制</button>
+          </div>
+          <div class="chips" id="exampleChips">
+            <button class="chip" data-expr="x^2 - 2x - 1">x²−2x−1</button>
+            <button class="chip" data-expr="sin(x)">sin x</button>
+            <button class="chip" data-expr="x^3 - 3x">x³−3x</button>
+            <button class="chip" data-expr="e^x">eˣ</button>
+            <button class="chip" data-expr="ln(x)">ln x</button>
+            <button class="chip" data-expr="1/x">1/x</button>
+            <button class="chip" data-expr="sqrt(x)">√x</button>
+          </div>
+          <div class="formula-card">拖动空白处平移，滚轮缩放。按 <b>Enter</b> 直接绘制；同一表达式会复用已有曲线。</div>
+
+          <div class="subcard">
+            <h4>求导 <span class="badge">DERIVATIVE</span></h4>
+            <div class="inline-fields">
+              <div class="f"><label>x₀</label><input id="x0Input" value="1" inputmode="decimal"></div>
+              <button class="go-sq" id="derivBtn" title="在 x₀ 处求导">↗</button>
+            </div>
+            <div class="checks">
+              <label class="check"><input type="checkbox" id="showTangent" checked>显示切线</label>
+              <label class="check"><input type="checkbox" id="showDerivative">显示导函数</label>
+            </div>
+            <div class="formula-card" id="derivHint">选择一条已绘制函数，点击 ↗ 计算 f′(x₀) 与切线方程。</div>
+          </div>
+
+          <div class="subcard">
+            <h4>定积分 <span class="badge">INTEGRAL</span></h4>
+            <div class="inline-fields">
+              <div class="f"><label>下限 a</label><input id="aInput" value="-1" inputmode="decimal"></div>
+              <div class="f"><label>上限 b</label><input id="bInput" value="2" inputmode="decimal"></div>
+              <button class="go-sq" id="integralBtn" title="计算定积分">∫</button>
+            </div>
+            <div class="checks">
+              <label class="check"><input type="checkbox" id="showArea" checked>显示曲边梯形</label>
+              <label class="check"><input type="checkbox" id="showAntiderivative">显示原函数</label>
+            </div>
+            <div class="formula-card" id="integralHint">用自适应 Simpson 法计算定积分，并给出可符号化的原函数。</div>
+          </div>
+        </section>
+
+        <section class="tab-pane" data-pane="conic">
+          <div class="field-label">曲线类型</div>
+          <div class="conic-types" id="conicTypes">
+            <button class="conic-type active" data-conic="circle">圆</button>
+            <button class="conic-type" data-conic="ellipse">椭圆</button>
+            <button class="conic-type" data-conic="parabola">抛物线</button>
+            <button class="conic-type" data-conic="hyperbola">双曲线</button>
+          </div>
+          <div id="conicFields"></div>
+          <button class="primary" id="conicBtn">生成并绘制曲线</button>
+          <div class="formula-card" id="conicFormula">圆心 (0, 0)，半径 3 时，方程为 x² + y² = 9。</div>
+          <div class="hint-box"><span>◎</span><div>生成后可在右侧查看<b>标准方程、焦点、离心率、准线或渐近线</b>。圆锥曲线会叠加在当前平面画布上。</div></div>
+        </section>
+
+        <section class="tab-pane" data-pane="geometry">
+          <div class="tool-group">
+            <div class="group-label">基本图形 · 三种线</div>
+            <div class="tool-grid five">
+              <button class="tool active" data-tool="select" title="选择 / 拖动顶点（V）">
+                <svg viewBox="0 0 24 24"><path d="M5 3l6 17 2.5-6.5L20 11 5 3z"/></svg><span>选择</span>
+              </button>
+              <button class="tool" data-tool="point" title="点（P）">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="7.5"/></svg><span>点</span>
+              </button>
+              <button class="tool" data-tool="segment" title="线段：点击两点">
+                <svg viewBox="0 0 24 24"><path d="M5 18L19 6"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/></svg><span>线段</span>
+              </button>
+              <button class="tool" data-tool="ray" title="射线：点击端点与方向点">
+                <svg viewBox="0 0 24 24"><path d="M4 18L20 6"/><path d="M20 6l-3.5.6M20 6l-.7 3.5"/><circle cx="4" cy="18" r="2"/></svg><span>射线</span>
+              </button>
+              <button class="tool" data-tool="line" title="直线：点击两点">
+                <svg viewBox="0 0 24 24"><path d="M3 20L21 4"/><circle cx="9" cy="14" r="1.6"/><circle cx="15" cy="9" r="1.6"/></svg><span>直线</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tool-group">
+            <div class="group-label">三角形 · 点击两点自动成形</div>
+            <div class="tool-grid">
+              <button class="tool" data-tool="triangle" title="一般三角形：点击三点">
+                <svg viewBox="0 0 24 24"><path d="M12 4L21 20H3L12 4z"/></svg><span>三角形</span>
+              </button>
+              <button class="tool" data-tool="right-triangle" title="直角三角形：点击直角边两端">
+                <svg viewBox="0 0 24 24"><path d="M5 19V6h14"/><path d="M5 12h6V6"/></svg><span>直角</span>
+              </button>
+              <button class="tool" data-tool="isosceles-triangle" title="等腰三角形：点击底边两端">
+                <svg viewBox="0 0 24 24"><path d="M4 19h16L12 5 4 19z"/><path d="M8 19v3M16 19v3"/></svg><span>等腰</span>
+              </button>
+              <button class="tool" data-tool="right-isosceles" title="等腰直角三角形：点击一条直角边">
+                <svg viewBox="0 0 24 24"><path d="M5 19V5h14L5 19z"/><path d="M5 13h6V5"/></svg><span>等腰直角</span>
+              </button>
+              <button class="tool" data-tool="equilateral" title="等边三角形：点击底边两端">
+                <svg viewBox="0 0 24 24"><path d="M12 3L21 19H3L12 3z"/><path d="M8 19v3M16 19v3M12 3v70" opacity=".35"/></svg><span>等边</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tool-group">
+            <div class="group-label">四边形 · 点击一条边</div>
+            <div class="tool-grid">
+              <button class="tool" data-tool="square" title="正方形：点击一条边">
+                <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><path d="M8 20v-3M4 16h3"/></svg><span>正方形</span>
+              </button>
+              <button class="tool" data-tool="rectangle" title="矩形：点击一条边">
+                <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12"/><path d="M7 18v-3M3 14h3"/></svg><span>矩形</span>
+              </button>
+              <button class="tool" data-tool="parallelogram" title="平行四边形：点击一条边">
+                <svg viewBox="0 0 24 24"><path d="M7 19h14L17 5H3l4 14z"/><path d="M4 17l2 2M18 7l2-2"/></svg><span>平行四边形</span>
+              </button>
+              <button class="tool" data-tool="rhombus" title="菱形：点击一条边">
+                <svg viewBox="0 0 24 24"><path d="M12 3l8 9-8 9-8-9 8-9z"/><path d="M7 8l2 2M15 14l2 2"/></svg><span>菱形</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tool-group">
+            <div class="group-label">圆与尺规作图</div>
+            <div class="tool-grid">
+              <button class="tool" data-tool="circle" title="圆：先点圆心，再点半径上的点">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><path d="M12 12l5.7-5.7"/></svg><span>圆</span>
+              </button>
+              <button class="tool" data-tool="perp-bisector" title="垂直平分线：点击线段的两个端点">
+                <svg viewBox="0 0 24 24"><path d="M4 18L20 6"/><path d="M7 18l10-6" stroke-dasharray="2 2"/><path d="M12 12v9M9 18l3 3 3-3"/></svg><span>垂直平分</span>
+              </button>
+              <button class="tool" data-tool="angle-bisector" title="角平分线：依次点顶点、边上一点、另一边上一点">
+                <svg viewBox="0 0 24 24"><path d="M4 20L12 5l8 15"/><path d="M12 5v14" stroke-dasharray="2 2"/><path d="M9.5 12a3 3 0 013.5.8"/></svg><span>角平分</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tool-group">
+            <div class="group-label">全等 / 相似标记</div>
+            <div class="tool-grid">
+              <button class="tool mark" data-tool="congruent" title="全等标记：依次点击两个三角形">
+                <svg viewBox="0 0 24 24"><path d="M3 18L8 7l5 11H3zM13 18l4-8 4 8h-8z"/><path d="M9 12h6"/></svg><span>全等</span>
+              </button>
+              <button class="tool mark" data-tool="similar" title="相似标记：依次点击两个三角形">
+                <svg viewBox="0 0 24 24"><path d="M3 18L8 7l5 11H3z"/><path d="M13 18l3-7 5 7h-8z"/><path d="M11 12c2 1 3 1 5 0" stroke-dasharray="2 2"/></svg><span>相似</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <label class="check"><input type="checkbox" id="snapToggle" checked>吸附网格 / 顶点</label>
+            <label class="check"><input type="checkbox" id="labelToggle" checked>显示字母标注</label>
+          </div>
+          <div class="geom-extra">
+            <button class="btn soft" id="demoCongruent">全等示例</button>
+            <button class="btn soft" id="demoSimilar">相似示例</button>
+            <button class="btn danger" id="clearGeom">清空作图</button>
+          </div>
+          <div class="hint-box teal" id="geoHint"><span>✎</span><div><b>选择 / 拖动：</b>点击空白处平移画布；拖动顶点可改变图形。被标记的全等或相似关系会随图形一起移动。</div></div>
+        </section>
+      </div>
+
+      <div class="space-panel" id="spacePanel" hidden>
+        <div class="field-label">添加空间点 <span>单位坐标</span></div>
+        <div class="param-grid">
+          <div class="f"><label>x</label><input id="sx" value="2" inputmode="decimal"></div>
+          <div class="f"><label>y</label><input id="sy" value="3" inputmode="decimal"></div>
+          <div class="f"><label>z</label><input id="sz" value="4" inputmode="decimal"></div>
+          <div class="f"><label>&nbsp;</label><button class="btn" id="addSpacePoint" style="width:100%;padding:7px 4px">添加点</button></div>
+        </div>
+        <div class="axis-legend">
+          <div class="x"><b>x</b>x 轴</div><div class="y"><b>y</b>y 轴</div><div class="z"><b>z</b>z 轴</div>
+        </div>
+        <div class="space-points" id="spacePointList"></div>
+        <div class="hint-box"><span>↻</span><div><b>拖动旋转：</b>在画布上左右拖动改变方位角，上下拖动改变俯仰角；滚轮缩放。空间点会投影到屏幕上，并保留真实坐标。</div></div>
+        <button class="btn danger" id="clearSpace" style="width:100%;margin-top:9px">清空空间点</button>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="stage-toolbar">
+        <button class="tool-btn" id="undoBtn" title="撤销 (Ctrl+Z)" disabled>
+          <svg viewBox="0 0 24 24"><path d="M9 7L4 12l5 5"/><path d="M4 12h10a5 5 0 015 5v1"/></svg><span>撤销</span>
+        </button>
+        <button class="tool-btn" id="redoBtn" title="重做 (Ctrl+Shift+Z)" disabled>
+          <svg viewBox="0 0 24 24"><path d="M15 7l5 5-5 5"/><path d="M20 12H10a5 5 0 00-5 5v1"/></svg><span>重做</span>
+        </button>
+        <button class="tool-btn warn" id="deleteBtn" title="删除选中 (Delete)" disabled>
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg><span>删除</span>
+        </button>
+        <div class="tb-sep"></div>
+        <button class="tool-btn" id="fitBtn" title="适应画布">
+          <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>适应</span>
+        </button>
+        <button class="tool-btn" id="centerBtn" title="回到原点">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><span>原点</span>
+        </button>
+        <button class="tool-btn" id="exportBtn" title="导出 PNG">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg><span>导出</span>
+        </button>
+        <div class="tb-grow"></div>
+        <div class="zoom-pill">
+          <button id="zoomOut" title="缩小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" title="放大">＋</button>
+        </div>
+      </div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="board" aria-label="函数与几何画布"></canvas>
+        <div class="canvas-badge" id="canvasBadge"><span class="dot"></span><b>平面直角坐标系</b><span id="canvasModeText">函数图像</span></div>
+        <div class="canvas-legend" id="canvasLegend"></div>
+      </div>
+      <div class="stage-foot">
+        <span class="coords" id="coordReadout">x = 0.00 &nbsp;·&nbsp; y = 0.00</span>
+        <span class="foot-hint" id="footHint"><b>提示：</b>拖动平移 · 滚轮缩放 · 双击回原点</span>
+        <span><span class="kbd">Esc</span> 取消 &nbsp; <span class="kbd">Del</span> 删除</span>
+      </div>
+    </section>
+
+    <aside class="panel right-panel">
+      <div class="panel-head"><h2>研究面板</h2><span class="tag" id="rightTag">函数</span></div>
+      <div class="right-body">
+        <section class="r-sec" id="analysisSection">
+          <div class="r-sec-head"><h3>分析结果</h3><span id="analysisMeta">实时</span></div>
+          <div id="analysisBox"><div class="analysis-empty">绘制一条函数后，这里会显示表达式、求导与定积分结果。</div></div>
+        </section>
+        <section class="r-sec" id="selectionSection">
+          <div class="r-sec-head"><h3>选中对象</h3><span id="selMeta">未选择</span></div>
+          <div id="selectionBox"><div class="analysis-empty">在画布或对象列表中选择一个图形，查看边长、角度、面积与方程。</div></div>
+        </section>
+        <section class="r-sec">
+          <div class="r-sec-head"><h3>画布对象</h3><span id="objMeta">0</span></div>
+          <div class="obj-list" id="objectList"><div class="empty-list">还没有对象</div></div>
+        </section>
+        <section class="r-sec">
+          <div class="r-sec-head"><h3>操作提示</h3><span>HINT</span></div>
+          <div id="hintCard" class="analysis-empty">选择左侧工具开始研究。所有计算和作图都在浏览器本地完成。</div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    <span><b>函数与几何实验室</b> · 平面 / 空间 / 空白画布</span>
+    <span>图形本地计算 · 可导出 PNG · <a href="index.html">返回交互实验室</a></span>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="js-error" id="jsError"></div>
+<script src="functions-geometry.js"></script>
+</body>
+</html>
