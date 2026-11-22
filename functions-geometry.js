@@ -53,7 +53,7 @@ const state = {
   keepOriginal: true,
   geom: {
     points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0,
-    snap: true, showLabels: true, horizontalBase: true
+    snap: true, integerSnap: false, showLabels: true, horizontalBase: true
   },
   selected: null,
   hover: null,
@@ -1878,7 +1878,7 @@ function applySnapshot(snap) {
     state.rotateExpr = typeof s.rotateExpr === 'string' ? s.rotateExpr : state.rotateExpr;
     state.keepOriginal = typeof s.keepOriginal === 'boolean' ? s.keepOriginal : true;
     if (s.geom) {
-      state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true, horizontalBase: true }, cloneData(s.geom));
+      state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, integerSnap: false, showLabels: true, horizontalBase: true }, cloneData(s.geom));
       if (!Array.isArray(state.geom.shapes)) state.geom.shapes = [];
       if (!Array.isArray(state.geom.marks)) state.geom.marks = [];
       if (!Array.isArray(state.geom.transforms)) state.geom.transforms = [];
@@ -3126,10 +3126,11 @@ function setTab(tab) {
 
 function updateToolbarVisibility() {
   const geom = state.mode !== 'space' && state.tab === 'geometry';
-  const undoBtn = $('#undoBtn'), redoBtn = $('#redoBtn'), delBtn = $('#deleteBtn');
+  const undoBtn = $('#undoBtn'), redoBtn = $('#redoBtn'), delBtn = $('#deleteBtn'), coordBtn = $('#coordPointBtn');
   if (undoBtn) undoBtn.hidden = false;
   if (redoBtn) redoBtn.hidden = false;
   if (delBtn) delBtn.hidden = !geom;
+  if (coordBtn) coordBtn.hidden = !geom;
   updateHistoryButtons();
   if (delBtn) delBtn.disabled = !geom || !state.selected;
 }
@@ -3214,8 +3215,9 @@ function updateHint() {
 }
 
 function syncSnapToggles() {
-  const snap = $('#snapToggle'), labels = $('#labelToggle'), hb = $('#horizontalBase');
+  const snap = $('#snapToggle'), labels = $('#labelToggle'), hb = $('#horizontalBase'), intSnap = $('#integerSnap');
   if (snap) snap.checked = !!state.geom.snap;
+  if (intSnap) intSnap.checked = !!state.geom.integerSnap;
   if (labels) labels.checked = !!state.geom.showLabels;
   if (hb) hb.checked = state.geom.horizontalBase !== false;
 }
@@ -3417,6 +3419,7 @@ function renderSelection() {
       <div class="sel-sub">${mid ? '线段中点：由两端点唯一确定，拖动端点时自动同步。' : p.imageOf ? '该点是变换得到的像点。' : '拖动该点可以改变所有与它相连的图形。'}</div>
       <div class="measure-row"><span>x 坐标</span><b>${fmt(p.x, 4)}</b></div>
       <div class="measure-row"><span>y 坐标</span><b>${fmt(p.y, 4)}</b></div>
+      ${p.xExpr || p.yExpr ? `<div class="measure-row"><span>精确输入</span><b class="txt">(${esc(p.xExpr || '')}, ${esc(p.yExpr || '')})</b></div>` : ''}
       ${mid ? `<div class="measure-row"><span>所属线段</span><b class="txt">${esc((mid.a ? mid.a.label : '?') + (mid.b ? mid.b.label : '?'))} 的中点</b></div>` : ''}
       <div class="measure-row"><span>关联图形</span><b class="txt">${related.length ? esc(related.join('、')) : '—'}</b></div>`;
     if (mid && mid.a && mid.b) {
@@ -4022,8 +4025,8 @@ function snapWorld(sp, alt = false) {
   const p = hitTestPoint(sp, 13);
   if (p) return { x: p.x, y: p.y, pid: p.id };
   const w = s2w(sp);
-  if (state.geom.snap && !alt) {
-    const g = .5;
+  if ((state.geom.snap || state.geom.integerSnap) && !alt) {
+    const g = state.geom.integerSnap ? 1 : .5;
     return { x: Math.round(w.x / g) * g, y: Math.round(w.y / g) * g, pid: null };
   }
   return { x: w.x, y: w.y, pid: null };
@@ -4567,9 +4570,10 @@ function onPointerMove(e) {
     for (const pid in d.orig) {
       const p = getPt(pid);
       if (!p) continue;
-      if (state.geom.snap && !e.altKey) {
-        p.x = Math.round((d.orig[pid].x + dx) * 2) / 2;
-        p.y = Math.round((d.orig[pid].y + dy) * 2) / 2;
+      if ((state.geom.snap || state.geom.integerSnap) && !e.altKey) {
+        const step = state.geom.integerSnap ? 1 : .5;
+        p.x = Math.round((d.orig[pid].x + dx) / step) * step;
+        p.y = Math.round((d.orig[pid].y + dy) / step) * step;
       } else {
         p.x = d.orig[pid].x + dx;
         p.y = d.orig[pid].y + dy;
@@ -4722,6 +4726,113 @@ const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tess
 let ocrFile = null;
 let ocrPreviewUrl = null;
 let ocrEnginePromise = null;
+
+/* ---------- 坐标建点（支持根号） ---------- */
+
+function astUsesVariable(n) {
+  if (!n) return false;
+  if (n.t === 'var') return true;
+  if (n.t === 'un') return astUsesVariable(n.a);
+  if (n.t === 'bin') return astUsesVariable(n.l) || astUsesVariable(n.r);
+  if (n.t === 'call') return (n.args || []).some(astUsesVariable);
+  return false;
+}
+
+function normalizeCoordinateExpr(raw) {
+  let s = String(raw || '').trim()
+    .replace(/[−–—]/g, '-')
+    .replace(/[×·]/g, '*')
+    .replace(/[÷]/g, '/')
+    .replace(/[（]/g, '(').replace(/[）]/g, ')')
+    .replace(/²/g, '^2')
+    .replace(/π/g, 'pi')
+    .replace(/根号\s*\(([^()]*)\)/g, 'sqrt($1)')
+    .replace(/根号\s*([0-9]+(?:\.[0-9]+)?)/g, 'sqrt($1)')
+    .replace(/根号/g, 'sqrt')
+    .replace(/\s+/g, '');
+  s = s.replace(/√\s*\(([^()]*)\)/g, 'sqrt($1)');
+  s = s.replace(/√\s*([0-9]+(?:\.[0-9]+)?)/g, 'sqrt($1)');
+  s = s.replace(/√/g, 'sqrt');
+  s = s.replace(/sqrt\s*([0-9]+(?:\.[0-9]+)?)/g, 'sqrt($1)');
+  s = s.replace(/([0-9)])\s*(sqrt|pi|e)\b/g, '$1*$2');
+  return s;
+}
+
+function evalCoordinateExpr(raw) {
+  const normalized = normalizeCoordinateExpr(raw);
+  if (!normalized) throw new Error('请输入坐标值');
+  const ast = parseExpression(normalized);
+  if (astUsesVariable(ast)) throw new Error('坐标里不能包含字母 x / y，请用数字、根号或 π');
+  const value = evalNode(ast, 0);
+  if (!Number.isFinite(value)) throw new Error('这个坐标无法计算出实数');
+  if (Math.abs(value) > 1e5) throw new Error('坐标超出可用范围');
+  return { value, normalized, source: String(raw || '').trim() };
+}
+
+function updateCoordPreview() {
+  const preview = $('#coordPreview'), errBox = $('#coordError'), create = $('#coordCreate');
+  if (!preview || !errBox) return;
+  try {
+    const x = evalCoordinateExpr($('#coordX').value);
+    const y = evalCoordinateExpr($('#coordY').value);
+    preview.innerHTML = `x = <b>${fmt(x.value, 6)}</b> <span style="color:#9a8f7a">· ${esc(x.source)}</span><br>y = <b>${fmt(y.value, 6)}</b> <span style="color:#9a8f7a">· ${esc(y.source)}</span>`;
+    errBox.textContent = '';
+    if (create) create.disabled = false;
+  } catch (err) {
+    preview.innerHTML = '输入后会在这里显示精确值对应的近似坐标。';
+    errBox.textContent = err.message || '坐标格式有误';
+    if (create) create.disabled = true;
+  }
+}
+
+function openCoordPoint() {
+  const modal = $('#coordPointModal');
+  if (!modal) return;
+  if (state.mode === 'space') setMode('plane');
+  modal.hidden = false;
+  document.body.classList.add('modal-open');
+  updateCoordPreview();
+  setTimeout(() => { const x = $('#coordX'); if (x) { x.focus(); x.select(); } }, 50);
+}
+
+function closeCoordPoint() {
+  const modal = $('#coordPointModal');
+  if (!modal) return;
+  modal.hidden = true;
+  if ($('#ocrModal') && $('#ocrModal').hidden) document.body.classList.remove('modal-open');
+}
+
+function createCoordPoint() {
+  try {
+    const x = evalCoordinateExpr($('#coordX').value);
+    const y = evalCoordinateExpr($('#coordY').value);
+    const existing = state.geom.points.find(p => !p.derived
+      && Math.abs(p.x - x.value) < 1e-8 && Math.abs(p.y - y.value) < 1e-8);
+    if (existing) {
+      state.selected = { kind: 'point', id: existing.id };
+      closeCoordPoint();
+      renderAllPanels(); draw(); saveSoon();
+      toast(`该位置已有点 ${existing.label}，已直接选中。`, '');
+      return;
+    }
+    pushHistory();
+    if (state.mode === 'space') setMode('plane');
+    if (state.tab !== 'geometry') setTab('geometry');
+    const p = makePoint(x.value, y.value);
+    p.xExpr = x.source;
+    p.yExpr = y.source;
+    state.selected = { kind: 'point', id: p.id };
+    const sp = w2s(p);
+    if (sp.x < 10 || sp.x > W - 10 || sp.y < 10 || sp.y > H - 10) fitAll();
+    closeCoordPoint();
+    renderAllPanels(); draw(); saveSoon();
+    toast(`已生成点 ${p.label}(${x.source}, ${y.source})`, 'ok');
+  } catch (err) {
+    const box = $('#coordError');
+    if (box) box.textContent = err.message || '坐标格式有误';
+    updateCoordPreview();
+  }
+}
 
 function openOcr() {
   const modal = $('#ocrModal');
@@ -5195,12 +5306,13 @@ function restoreState() {
     if (typeof data.rotateExpr === 'string' && data.rotateExpr.trim()) state.rotateExpr = data.rotateExpr;
     if (typeof data.keepOriginal === 'boolean') state.keepOriginal = data.keepOriginal;
     if (data.geom && Array.isArray(data.geom.points)) {
-      state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true, horizontalBase: true }, data.geom);
+      state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, integerSnap: false, showLabels: true, horizontalBase: true }, data.geom);
       if (!Array.isArray(state.geom.shapes)) state.geom.shapes = [];
       if (!Array.isArray(state.geom.marks)) state.geom.marks = [];
       if (!Array.isArray(state.geom.transforms)) state.geom.transforms = [];
       if (!state.geom.alpha || typeof state.geom.alpha !== 'object') state.geom.alpha = null;
       state.geom.snap = data.geom.snap !== false;
+      state.geom.integerSnap = data.geom.integerSnap === true;
       state.geom.showLabels = data.geom.showLabels !== false;
       state.geom.horizontalBase = data.geom.horizontalBase !== false;
       if (typeof state.geom.nextLabel !== 'number') state.geom.nextLabel = state.geom.points.length;
@@ -5316,6 +5428,11 @@ function bindUI() {
     toast('已清除 α 引用', '');
   });
   $('#snapToggle').addEventListener('change', e => { state.geom.snap = e.target.checked; saveSoon(); });
+  $('#integerSnap').addEventListener('change', e => {
+    state.geom.integerSnap = e.target.checked;
+    saveSoon();
+    toast(e.target.checked ? '整点吸附已开启：新点会落在横纵坐标均为整数的位置。' : '整点吸附已关闭。', '');
+  });
   $('#labelToggle').addEventListener('change', e => { state.geom.showLabels = e.target.checked; draw(); saveSoon(); });
   $('#horizontalBase').addEventListener('change', e => { state.geom.horizontalBase = e.target.checked; updateHint(); draw(); saveSoon(); });
   $('#demoCongruent').addEventListener('click', () => loadDemo('congruent'));
@@ -5409,6 +5526,18 @@ function bindUI() {
 
   $('#ocrBtn').addEventListener('click', openOcr);
   $$('[data-close-ocr]').forEach(el => el.addEventListener('click', closeOcr));
+  $('#coordPointBtn').addEventListener('click', openCoordPoint);
+  $$('[data-close-coord]').forEach(el => el.addEventListener('click', closeCoordPoint));
+  $('#coordCreate').addEventListener('click', createCoordPoint);
+  ['#coordX', '#coordY'].forEach(sel => {
+    const el = $(sel);
+    if (!el) return;
+    el.addEventListener('input', updateCoordPreview);
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); createCoordPoint(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeCoordPoint(); }
+    });
+  });
   const drop = $('#ocrDrop');
   drop.addEventListener('click', () => $('#ocrFile').click());
   $('#ocrFile').addEventListener('change', e => {
@@ -5448,6 +5577,7 @@ function bindUI() {
   });
 
   window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('#coordPointModal') && !$('#coordPointModal').hidden) { e.preventDefault(); closeCoordPoint(); return; }
     if (e.key === 'Escape' && !$('#ocrModal').hidden) { e.preventDefault(); closeOcr(); return; }
     const tag = (e.target && e.target.tagName) || '';
     const typing = /INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable);
