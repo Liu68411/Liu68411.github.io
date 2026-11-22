@@ -1809,26 +1809,85 @@ function quadMetrics(shape) {
   return { pts: p, labels: p.map(q => q.label), sides, angles, area, perimeter, allRight, allEq, para, className };
 }
 
-/* ---------- 历史记录 ---------- */
+/* ---------- 历史记录（函数 / 圆锥曲线 / 几何 / 空间点） ---------- */
 
-function geomSnapshot() { return JSON.stringify(state.geom); }
+const cloneData = v => v == null ? v : JSON.parse(JSON.stringify(v));
+
+function captureSnapshot() {
+  return {
+    mode: state.mode,
+    tab: state.tab,
+    functions: state.functions.map(f => ({ id: f.id, expr: f.expr, color: f.color, visible: f.visible })),
+    activeFnId: state.activeFnId,
+    curve: cloneData(state.curve),
+    conicResult: cloneData(state.conicResult),
+    conicType: state.conicType,
+    conicParams: cloneData(state.conicParams),
+    calc: cloneData(state.calc),
+    rotateExpr: state.rotateExpr,
+    keepOriginal: state.keepOriginal,
+    geom: cloneData(state.geom),
+    spacePoints: cloneData(state.space.points),
+    spaceNextLabel: state.space.nextLabel || 0
+  };
+}
+
+function applySnapshot(snap) {
+  try {
+    const s = typeof snap === 'string' ? JSON.parse(snap) : snap;
+    const fns = [];
+    for (const f of (s.functions || [])) {
+      if (!f || typeof f.expr !== 'string') continue;
+      try {
+        fns.push({ id: f.id || uid('f'), expr: f.expr, ast: parseExpression(f.expr), color: f.color || fnColor(fns.length), visible: f.visible !== false });
+      } catch { /* skip broken */ }
+    }
+    state.functions = fns;
+    state.activeFnId = fns.some(f => f.id === s.activeFnId) ? s.activeFnId : (fns[0] ? fns[0].id : null);
+    state.curve = cloneData(s.curve) || null;
+    state.conicResult = cloneData(s.conicResult) || null;
+    if (s.conicType) state.conicType = s.conicType;
+    if (s.conicParams) state.conicParams = Object.assign(cloneData(state.conicParams), cloneData(s.conicParams));
+    state.calc = cloneData(s.calc) || null;
+    state.rotateExpr = typeof s.rotateExpr === 'string' ? s.rotateExpr : state.rotateExpr;
+    state.keepOriginal = typeof s.keepOriginal === 'boolean' ? s.keepOriginal : true;
+    if (s.geom) {
+      state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true, horizontalBase: true }, cloneData(s.geom));
+      if (!Array.isArray(state.geom.shapes)) state.geom.shapes = [];
+      if (!Array.isArray(state.geom.marks)) state.geom.marks = [];
+      if (!Array.isArray(state.geom.transforms)) state.geom.transforms = [];
+    }
+    if (Array.isArray(s.spacePoints)) {
+      state.space.points = cloneData(s.spacePoints);
+      state.space.nextLabel = Number.isFinite(s.spaceNextLabel) ? s.spaceNextLabel : state.space.points.length;
+    }
+    state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null; state.hover = null;
+    syncDerivedPoints();
+    if (!getPtVisibleSelection()) state.selected = null;
+    if (s.mode && s.mode !== state.mode && ['plane', 'space', 'blank'].includes(s.mode)) setMode(s.mode);
+    if (s.mode !== 'space' && s.tab && s.tab !== state.tab && ['function', 'conic', 'geometry'].includes(s.tab)) setTab(s.tab);
+    if (s.mode && ['plane', 'space', 'blank'].includes(s.mode)) state.mode = s.mode;
+    if (s.tab && ['function', 'conic', 'geometry'].includes(s.tab)) state.tab = s.tab;
+    syncSnapToggles();
+    const input = $('#exprInput');
+    const act = activeFn();
+    if (input && act) input.value = act.expr;
+    updateTransformUI();
+    renderAllPanels();
+    draw();
+    saveSoon();
+    return true;
+  } catch (err) {
+    toast('无法恢复历史状态', 'bad');
+    return false;
+  }
+}
+
 function pushHistory() {
-  state.history.push(geomSnapshot());
+  state.history.push(captureSnapshot());
   if (state.history.length > 60) state.history.shift();
   state.future = [];
   updateHistoryButtons();
-}
-function restoreGeom(str) {
-  try {
-    const g = JSON.parse(str);
-    state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true, horizontalBase: true }, g);
-    if (!Array.isArray(state.geom.transforms)) state.geom.transforms = [];
-    if (!getPtVisibleSelection()) state.selected = null;
-    state.pending = []; state.markFirst = null; state.transformTarget = null; state.preview = null;
-    syncDerivedPoints();
-    syncSnapToggles();
-    renderAllPanels(); draw(); saveSoon();
-  } catch { toast('无法恢复历史状态', 'bad'); }
 }
 function getPtVisibleSelection() {
   const s = state.selected;
@@ -1840,14 +1899,24 @@ function getPtVisibleSelection() {
 }
 function undo() {
   if (!state.history.length) return;
-  state.future.push(geomSnapshot());
-  restoreGeom(state.history.pop());
+  state.future.push(captureSnapshot());
+  const snap = state.history.pop();
+  if (applySnapshot(snap)) {
+    toast('已撤回上一步', '');
+  } else {
+    state.history.push(snap);
+  }
   updateHistoryButtons();
 }
 function redo() {
   if (!state.future.length) return;
-  state.history.push(geomSnapshot());
-  restoreGeom(state.future.pop());
+  state.history.push(captureSnapshot());
+  const snap = state.future.pop();
+  if (applySnapshot(snap)) {
+    toast('已重做', '');
+  } else {
+    state.future.push(snap);
+  }
   updateHistoryButtons();
 }
 function updateHistoryButtons() {
@@ -3006,13 +3075,12 @@ function setTab(tab) {
 
 function updateToolbarVisibility() {
   const geom = state.mode !== 'space' && state.tab === 'geometry';
-  ['#undoBtn', '#redoBtn', '#deleteBtn'].forEach(sel => {
-    const el = $(sel);
-    if (el) el.hidden = !geom;
-  });
+  const undoBtn = $('#undoBtn'), redoBtn = $('#redoBtn'), delBtn = $('#deleteBtn');
+  if (undoBtn) undoBtn.hidden = false;
+  if (redoBtn) redoBtn.hidden = false;
+  if (delBtn) delBtn.hidden = !geom;
   updateHistoryButtons();
-  const d = $('#deleteBtn');
-  if (d) d.disabled = !geom || !state.selected;
+  if (delBtn) delBtn.disabled = !geom || !state.selected;
 }
 
 function setTool(tool) {
@@ -3410,6 +3478,7 @@ function addFunctionFromInput() {
     id: uid('f'), expr: raw, ast, color: fnColor(state.functions.length),
     visible: true
   };
+  pushHistory();
   state.functions.push(fn);
   if (state.functions.length > 6) {
     const removed = state.functions.shift();
@@ -3460,6 +3529,7 @@ function computeDerivative() {
   const y0 = f(x0);
   const slope = numericDerivative(f, x0);
   const tangent = tangentEquation(slope, x0, y0);
+  pushHistory();
   state.calc = Object.assign({}, state.calc, {
     fnId: fn.id,
     deriv: { expr, x0, y0, slope, tangent }
@@ -3500,6 +3570,7 @@ function computeIntegral() {
     const anti = integrateNode(fn.ast);
     if (anti) antideriv = toStr(simplify(anti));
   } catch { antideriv = null; }
+  pushHistory();
   state.calc = Object.assign({}, state.calc, {
     fnId: fn.id,
     integral: { a, b, value: r.value, singular: r.singular, antideriv }
@@ -3581,6 +3652,7 @@ function generateConic() {
   try {
     const c = buildConic(state.conicType, state.conicParams[state.conicType]);
     c.visible = true;
+    pushHistory();
     state.curve = c;
     state.conicResult = c;
     state.analysisMode = 'conic';
@@ -3611,6 +3683,7 @@ function addSpacePoint() {
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) { toast('请输入三个有效数字', 'warn'); return; }
   if (Math.abs(x) > 20 || Math.abs(y) > 20 || Math.abs(z) > 20) { toast('坐标建议在 −20 到 20 之间', 'warn'); return; }
   if (state.space.points.length >= 30) { toast('空间点最多添加 30 个', 'warn'); return; }
+  pushHistory();
   const n = state.space.nextLabel || 0;
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const label = letters[n % 26] + (Math.floor(n / 26) || '');
@@ -3620,7 +3693,8 @@ function addSpacePoint() {
   toast(`已添加空间点 ${label}(${fmt(x, 2)}, ${fmt(y, 2)}, ${fmt(z, 2)})`, 'ok');
 }
 
-function removeSpacePoint(id) {
+function removeSpacePoint(id, record = true) {
+  if (record) pushHistory();
   state.space.points = state.space.points.filter(p => p.id !== id);
   renderSpacePointList(); renderObjectList(); draw(); saveSoon();
 }
@@ -3899,6 +3973,7 @@ function deleteObject(kind, id) {
   if (kind === 'fn') {
     const idx = state.functions.findIndex(f => f.id === id);
     if (idx < 0) return;
+    pushHistory();
     state.functions.splice(idx, 1);
     state.functions.forEach((f, i) => { f.color = fnColor(i); });
     if (state.activeFnId === id) {
@@ -3911,11 +3986,13 @@ function deleteObject(kind, id) {
     return;
   }
   if (kind === 'curve') {
+    if (!state.curve) return;
+    pushHistory();
     state.curve = null; state.conicResult = null;
     renderObjectList(); renderAnalysis(); draw(); saveSoon();
     return;
   }
-  if (kind === 'space') { removeSpacePoint(id); return; }
+  if (kind === 'space') { pushHistory(); removeSpacePoint(id, false); return; }
   pushHistory();
   deleteGeomObjectSilent(kind, id);
   if (state.selected && state.selected.id === id) state.selected = null;
@@ -3923,20 +4000,19 @@ function deleteObject(kind, id) {
 }
 
 function toggleVisibility(kind, id) {
-  if (kind === 'fn') {
-    const f = state.functions.find(x => x.id === id);
-    if (f) f.visible = !f.visible;
-  } else if (kind === 'curve') {
-    if (state.curve) state.curve.visible = state.curve.visible === false ? true : false;
-  } else if (kind === 'shape') {
-    const s = getShape(id); if (s) s.visible = !s.visible;
-  } else if (kind === 'point') {
-    const p = getPt(id); if (p) p.visible = !p.visible;
-  } else if (kind === 'mark') {
-    const m = state.geom.marks.find(x => x.id === id); if (m) m.visible = !m.visible;
-  } else if (kind === 'space') {
-    const p = state.space.points.find(x => x.id === id); if (p) p.visible = p.visible === false;
-  }
+  let obj = null;
+  if (kind === 'fn') obj = state.functions.find(x => x.id === id);
+  else if (kind === 'curve') obj = state.curve;
+  else if (kind === 'shape') obj = getShape(id);
+  else if (kind === 'point') obj = getPt(id);
+  else if (kind === 'mark') obj = state.geom.marks.find(x => x.id === id);
+  else if (kind === 'space') obj = state.space.points.find(x => x.id === id);
+  if (!obj) return;
+  pushHistory();
+  if (kind === 'fn') obj.visible = !obj.visible;
+  else if (kind === 'curve') obj.visible = obj.visible === false;
+  else if (kind === 'shape' || kind === 'point' || kind === 'mark') obj.visible = !obj.visible;
+  else if (kind === 'space') obj.visible = obj.visible === false;
   renderObjectList(); renderSelection(); draw(); saveSoon();
 }
 
@@ -4543,6 +4619,7 @@ function ocrApplyData(text, replace) {
     return false;
   }
 
+  pushHistory();
   if (replace) {
     state.functions = [];
     state.activeFnId = null;
@@ -4923,6 +5000,7 @@ function bindUI() {
   });
   $('#clearSpace').addEventListener('click', () => {
     if (!state.space.points.length) return;
+    pushHistory();
     state.space.points = []; state.space.nextLabel = 0;
     renderSpacePointList(); renderObjectList(); draw(); saveSoon();
   });
@@ -5006,13 +5084,11 @@ function bindUI() {
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-      if (state.mode === 'space' || state.tab !== 'geometry') return;
       e.preventDefault();
       if (e.shiftKey) redo(); else undo();
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-      if (state.mode === 'space' || state.tab !== 'geometry') return;
       e.preventDefault(); redo(); return;
     }
     if (e.key === 'Escape') { cancelPending(); return; }
