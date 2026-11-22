@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<meta name="description" content="可交互的函数与几何实验室：平面 / 空间 / 空白画布，函数图像、求导、积分，圆、椭圆、抛物线与双曲线，三角形、四边形、圆与尺规作图，以及全等与相似标记。">
+<meta name="description" content="可交互的函数与几何实验室：平面 / 空间 / 空白画布，函数图像、求导、积分，圆、椭圆、抛物线与双曲线，三角形、四边形、圆与尺规作图，中点、旋转、轴对称，以及全等与相似标记。">
 <title>函数与几何实验室 · 交互实验室</title>
 <style>
   :root{
@@ -116,6 +116,25 @@
   .subcard h4{margin:0 0 8px;font-size:11.5px;font-weight:800;display:flex;align-items:center;gap:6px;color:#4b5563}
   .subcard h4 .badge{font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--violet);background:var(--violet-soft);border-radius:4px;padding:1px 5px}
   .subcard h4 .badge.teal{color:var(--teal);background:var(--teal-soft)}
+  .transform-card{border-color:#d9d2f0;background:linear-gradient(180deg,#fcfbff,#fbf8f1)}
+  .alpha-line{display:flex;align-items:center;gap:7px;padding:7px 8px;border:1px solid #e7def8;border-radius:8px;background:#fff;margin-bottom:8px}
+  .alpha-mark{width:24px;height:24px;border-radius:7px;background:#fff4df;color:#92400e;display:grid;place-items:center;font-family:"Cambria Math",Georgia,serif;font-size:14px;font-style:italic;font-weight:700;flex:none}
+  .alpha-readout{flex:1;min-width:0;font-size:9.5px;line-height:1.35;color:#8b8272}
+  .alpha-readout b{display:block;font-family:"Cambria Math",Georgia,serif;font-size:11.5px;color:#92400e;font-weight:700}
+  .alpha-readout span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .alpha-clear{border:0;background:transparent;color:#b0a58f;cursor:pointer;font-size:14px;line-height:1;padding:2px}
+  .alpha-clear:hover{color:var(--rose)}
+  .rotate-input{width:100%;border:1.5px solid #ddd3c0;border-radius:8px;background:#fff;padding:8px 9px;font-family:"Cambria Math",Georgia,serif;font-size:13px;color:var(--ink);outline:0}
+  .rotate-input:focus{border-color:#7c3aed;box-shadow:0 0 0 3px #f0eafe}
+  .angle-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+  .angle-chip{border:1px solid #e4dccd;background:#fffdf9;color:#776c59;font-size:9.5px;font-weight:700;padding:3px 6px;border-radius:5px;cursor:pointer;font-family:"Cambria Math",Georgia,serif;transition:.14s}
+  .angle-chip:hover{border-color:#c4b5fd;background:#f8f4ff;color:#6d28d9}
+  .angle-chip.active{border-color:#a78bfa;background:#f0eafe;color:#6d28d9;box-shadow:0 0 0 2px rgba(124,58,237,.08)}
+  .rotate-preview{margin-top:7px;padding:7px 8px;border-radius:7px;background:#fff;border:1px dashed #ddd0ee;font-size:9.5px;color:#8b8272;line-height:1.5}
+  .rotate-preview b{font-family:"Cambria Math",Georgia,serif;font-size:12px;color:#5b21b6;display:block}
+  .rotate-preview span{display:block;font-family:"Cambria Math",Georgia,serif;color:#9a8f7a}
+  .rotate-preview.bad{background:#fff7f7;border-color:#fecaca;color:#b91c1c}
+  .rotate-preview.bad span{font-family:inherit;color:#b91c1c}
   .inline-fields{display:flex;gap:7px;align-items:flex-end}
   .inline-fields .f{flex:1;min-width:0}
   .inline-fields label{display:block;font-size:9.5px;font-weight:800;color:#9a8f7a;margin-bottom:3px}
@@ -322,12 +341,12 @@
     <div>
       <div class="kicker">FUNCTION &amp; GEOMETRY STUDIO</div>
       <h1>画函数，<em>也画几何</em></h1>
-      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形做可拖动的几何研究。</p>
+      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形作中点、旋转、轴对称等可拖动的几何研究。</p>
     </div>
     <div class="hero-side">
       <div><i></i>三种画布：平面 / 空间 / 空白</div>
       <div><i></i>函数图像 · 求导 · 定积分</div>
-      <div><i></i>全等与相似自动标记</div>
+      <div><i></i>中点 · 旋转 · 轴对称 · 全等相似</div>
     </div>
   </section>
 
@@ -491,6 +510,24 @@
               <button class="tool" data-tool="angle-bisector" title="角平分线：依次点顶点、边上一点、另一边上一点">
                 <svg viewBox="0 0 24 24"><path d="M4 20L12 5l8 15"/><path d="M12 5v14" stroke-dasharray="2 2"/><path d="M9.5 12a3 3 0 013.5.8"/></svg><span>角平分</span>
               </button>
+              <button class="tool" data-tool="midpoint" title="线段中点：点击线段，或依次点两个点">
+                <svg viewBox="0 0 24 24"><path d="M4 16L20 8"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M7 16.5l-1-2M17 9.5l1-2"/><path d="M9.5 14.2l1 1M13.5 10.8l1 1"/></svg><span>中点</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tool-group">
+            <div class="group-label">变换 · 旋转 / 轴对称</div>
+            <div class="tool-grid">
+              <button class="tool" data-tool="rotate" title="旋转：先选图形，再选旋转中心">
+                <svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0111.5-5.3"/><path d="M17 3v4h-4"/><path d="M19 12a7 7 0 01-11.5 5.3"/><path d="M7 21v-4h4"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg><span>旋转</span>
+              </button>
+              <button class="tool" data-tool="reflect" title="轴对称：先选图形，再选对称轴">
+                <svg viewBox="0 0 24 24"><path d="M12 2v20" stroke-dasharray="3 2"/><path d="M9 6L4 12l5 6V6zM15 6l5 6-5 6V6z"/></svg><span>轴对称</span>
+              </button>
+              <button class="tool" data-tool="set-alpha" title="取角 α：点击已有三角形或四边形的内角">
+                <svg viewBox="0 0 24 24"><path d="M3 20L14 5l7 15"/><path d="M8 14a5 5 0 015 2"/><text x="14" y="15" font-size="7" fill="currentColor" stroke="none" font-family="Georgia,serif" font-style="italic">α</text></svg><span>取角 α</span>
+              </button>
             </div>
           </div>
 
@@ -504,6 +541,31 @@
                 <svg viewBox="0 0 24 24"><path d="M3 18L8 7l5 11H3z"/><path d="M13 18l3-7 5 7h-8z"/><path d="M11 12c2 1 3 1 5 0" stroke-dasharray="2 2"/></svg><span>相似</span>
               </button>
             </div>
+          </div>
+
+          <div class="subcard transform-card">
+            <h4>旋转 / 轴对称 <span class="badge">TRANSFORM</span></h4>
+            <div class="alpha-line">
+              <span class="alpha-mark">α</span>
+              <div class="alpha-readout" id="alphaReadout"><span>未设置 · 用「取角 α」点三角形或四边形的顶点</span></div>
+              <button class="btn" id="setAlphaBtn" style="padding:4px 7px;font-size:9px">取角</button>
+              <button class="alpha-clear" id="clearAlpha" title="清除 α">×</button>
+            </div>
+            <div class="field-label" style="margin-bottom:4px">旋转角 <span>逆时针为正</span></div>
+            <input class="rotate-input" id="rotateExpr" value="180 - 2α" spellcheck="false" autocomplete="off" aria-label="旋转角表达式">
+            <div class="angle-chips">
+              <button class="angle-chip" data-angle="180 - 2α">180°−2α</button>
+              <button class="angle-chip" data-angle="90 - α">90°−α</button>
+              <button class="angle-chip" data-angle="90 + α">90°+α</button>
+              <button class="angle-chip" data-angle="2α">2α</button>
+              <button class="angle-chip" data-angle="180 - α">180°−α</button>
+              <button class="angle-chip" data-angle="90">90°</button>
+            </div>
+            <div class="rotate-preview" id="rotatePreview"></div>
+            <div class="checks" style="margin-top:7px">
+              <label class="check"><input type="checkbox" id="keepOriginal" checked>保留原图，生成带撇号的变换像</label>
+            </div>
+            <div class="hint-box amber" style="margin-top:8px"><span>↻</span><div><b>操作顺序：</b>选「旋转」或「轴对称」工具 → 点击要变换的点 / 图形 → 点击旋转中心或对称轴。旋转角可以直接引用 α。</div></div>
           </div>
 
           <div class="toggle-row">

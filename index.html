@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<meta name="description" content="交互实验室：初中物理动态演示、每日求导与微积分练习，以及可画函数、求导积分、生成圆锥曲线和标记全等相似的函数与几何画板。">
+<meta name="description" content="交互实验室：初中物理动态演示、每日求导与微积分练习，以及可画函数、求导积分、生成圆锥曲线、作中点与含参旋转、标记全等相似的函数与几何画板。">
 <title>交互实验室 · 物理、微积分与函数几何</title>
 <style>
   :root{
@@ -84,7 +84,7 @@
   .card.feature:hover{border-color:#b9a8f5;box-shadow:0 38px 80px -46px rgba(76,55,140,.6)}
   .feature .thumb{width:55%;height:auto;min-height:292px;flex:none;background:#f3f0fa}
   .feature .thumb img{height:100%;object-fit:cover;object-position:center}
-  .feature .badge{left:14px;top:14px;background:#fff;border-color:#ddd6fe;color:var(--violet);font-size:10px;padding:5px 9px}
+  .feature .badge{left:auto;right:14px;top:14px;background:#fff;border-color:#ddd6fe;color:var(--violet);font-size:10px;padding:5px 9px}
   .feature .body{width:45%;padding:26px 28px 24px;gap:9px;justify-content:center}
   .feature h3{font-size:26px;letter-spacing:-.025em}
   .feature .desc{font-size:13px;line-height:1.8}
@@ -148,17 +148,18 @@
     <div class="grid">
       <a class="card math feature" href="functions-geometry.html">
         <div class="thumb">
-          <span class="badge violet">NEW · MATH STUDIO</span>
           <img src="preview-functions.png" alt="函数与几何实验室预览">
         </div>
         <div class="body">
           <div class="tags"><span>平面 / 空间 / 空白</span><span>函数图像</span><span>求导 · 积分</span><span>圆锥曲线</span><span>几何作图</span></div>
           <h3>函数与几何实验室</h3>
-          <p class="desc">输入函数直接画图，查看导函数、切线与积分区域；用参数生成圆、椭圆、抛物线和双曲线。几何侧支持点、三种线、五类三角形、四类四边形、圆、垂直平分线与角平分线，并能自动标记全等三角形和相似三角形。</p>
+          <p class="desc">输入函数直接画图，查看导函数、切线与积分区域；用参数生成圆、椭圆、抛物线和双曲线。几何侧支持点、三种线、五类三角形、四类四边形、圆、中点、垂直平分线与角平分线，还能以任意已有角为 α 作旋转、轴对称，并自动标记全等三角形和相似三角形。</p>
           <div class="points">
             <span><i></i>平面 / 空间直角坐标系</span>
             <span><i></i>空白平面自由作图</span>
             <span><i></i>拖动顶点实时测量</span>
+            <span><i></i>中点 · 旋转 · 轴对称</span>
+            <span><i></i>全等 &amp; 相似标记</span>
             <span><i></i>一键导出 PNG</span>
           </div>
           <div class="go">打开画板 <span class="arrow">→</span></div>

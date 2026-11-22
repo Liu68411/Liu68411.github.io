@@ -47,13 +47,16 @@ const state = {
   conicResult: null,
   analysisMode: 'function',
   calc: null,
+  rotateExpr: '180 - 2α',
+  keepOriginal: true,
   geom: {
-    points: [], shapes: [], marks: [], nextLabel: 0,
+    points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0,
     snap: true, showLabels: true
   },
   selected: null,
   hover: null,
   pending: [],
+  transformTarget: null,
   preview: null,
   drag: null,
   markFirst: null,
@@ -1497,8 +1500,11 @@ function updateLegend() {
   } else if (state.tab === 'conic') {
     if (state.curve && state.curve.visible !== false) html = `<div><i style="background:#7c3aed"></i>${esc(state.curve.kind === 'circle' ? '圆' : state.curve.kind === 'ellipse' ? '椭圆' : state.curve.kind === 'parabola' ? '抛物线' : '双曲线')}</div><div>${esc(state.curve.equation)}</div>`;
   } else if (state.tab === 'geometry') {
-    html = '<div><i style="background:#0f766e"></i>顶点 / 图形</div><div><i class="dash" style="color:#b45309"></i>平分线</div>';
+    html = '<div><i style="background:#0f766e"></i>顶点 / 图形</div><div><i class="dash" style="color:#b45309"></i>平分线 / 中点</div>';
     if (state.geom.marks.length) html += '<div style="color:#15803d">≅ 全等 &nbsp; <span style="color:#b45309">∽ 相似</span></div>';
+    const a = getAlphaInfo();
+    if (a) html += `<div style="color:#92400e">α = ${fmt(a.value, 2)}°（${esc(a.label)}）</div>`;
+    if ((state.geom.transforms || []).length) html += '<div><i style="background:#2563eb"></i>旋转像 &nbsp; <i style="background:#be123c"></i>轴对称像</div>';
   }
   el.innerHTML = html;
   el.hidden = !html;
@@ -1522,6 +1528,62 @@ function makePoint(x, y, label) {
   state.geom.points.push(p);
   return p;
 }
+
+function usedPointLabels() {
+  return new Set(state.geom.points.map(p => String(p.label || '')));
+}
+function primeLabel(base) {
+  const used = usedPointLabels();
+  const clean = String(base || '').replace(/[′″‴]+$/g, '');
+  const primes = ['′', '″', '‴'];
+  for (let i = 0; i < primes.length; i++) {
+    if (!used.has(clean + primes[i])) return clean + primes[i];
+  }
+  let k = 1;
+  while (used.has(clean + '′' + k)) k++;
+  return clean + '′' + k;
+}
+
+// 由其它点决定的派生点（当前用于线段中点），拖动端点时自动同步
+function syncDerivedPoints() {
+  for (const p of state.geom.points) {
+    if (!p.derived || p.derived.type !== 'midpoint') continue;
+    const a = getPt(p.derived.a), b = getPt(p.derived.b);
+    if (!a || !b) continue;
+    p.x = (a.x + b.x) / 2;
+    p.y = (a.y + b.y) / 2;
+  }
+}
+
+function polygonPoints(shape) {
+  if (!shape) return null;
+  const pts = shapePoints(shape);
+  if ((shape.type === 'triangle' && pts.length === 3) || (shape.type === 'quad' && pts.length === 4)) return pts;
+  return null;
+}
+
+// 当前 α 引用的已有角（随顶点拖动实时更新）
+function getAlphaInfo() {
+  const a = state.geom.alpha;
+  if (!a) return null;
+  const s = getShape(a.shapeId);
+  const pts = polygonPoints(s);
+  if (!pts || !Number.isInteger(a.vertexIndex) || a.vertexIndex < 0 || a.vertexIndex >= pts.length) return null;
+  const i = a.vertexIndex, n = pts.length;
+  const v = pts[i], prev = pts[(i - 1 + n) % n], next = pts[(i + 1) % n];
+  if (!v || !prev || !next) return null;
+  const value = deg(angleAt(v, prev, next));
+  if (!Number.isFinite(value)) return null;
+  return {
+    value, shape: s, pts, vertexIndex: i, vertex: v, prev, next,
+    label: `∠${prev.label}${v.label}${next.label}`
+  };
+}
+function getAlphaValue() {
+  const info = getAlphaInfo();
+  return info ? info.value : null;
+}
+
 function shapePoints(shape) { return shape.points.map(getPt).filter(Boolean); }
 function shapeColor(shape) {
   if (shape.color) return shape.color;
@@ -1621,9 +1683,11 @@ function pushHistory() {
 function restoreGeom(str) {
   try {
     const g = JSON.parse(str);
-    state.geom = Object.assign({ points: [], shapes: [], marks: [], nextLabel: 0, snap: true, showLabels: true }, g);
+    state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true }, g);
+    if (!Array.isArray(state.geom.transforms)) state.geom.transforms = [];
     if (!getPtVisibleSelection()) state.selected = null;
-    state.pending = []; state.markFirst = null; state.preview = null;
+    state.pending = []; state.markFirst = null; state.transformTarget = null; state.preview = null;
+    syncDerivedPoints();
     syncSnapToggles();
     renderAllPanels(); draw(); saveSoon();
   } catch { toast('无法恢复历史状态', 'bad'); }
@@ -1765,6 +1829,7 @@ function centroidOf(pts) {
 
 function drawGeometry() {
   const g = state.geom;
+  syncDerivedPoints();
   if (!g.points.length && !g.shapes.length && !g.marks.length) {
     drawGeoEmpty();
     return;
@@ -1774,15 +1839,36 @@ function drawGeometry() {
     if (!s.visible) continue;
     drawShapeBase(s);
   }
+  // 变换像与原图的联系
+  drawTransformLinks();
   // 基础几何记号
   for (const s of g.shapes) {
     if (!s.visible) continue;
     drawShapeMarks(s);
   }
+  drawDerivedMarks();
+  drawAlphaHighlight();
   // 全等 / 相似
   for (const m of g.marks) {
     if (!m.visible) continue;
     drawRelationMark(m);
+  }
+  // 变换目标高亮
+  if (state.transformTarget) {
+    const tc = state.tool === 'reflect' ? 'rgba(190,18,60,.75)' : 'rgba(37,99,235,.75)';
+    if (state.transformTarget.kind === 'shape') {
+      const s = getShape(state.transformTarget.id);
+      if (s) drawShapeHover(s, tc);
+    } else {
+      const p = getPt(state.transformTarget.id);
+      if (p) {
+        const sp = w2s(p);
+        ctx.save();
+        ctx.beginPath(); ctx.arc(sp.x, sp.y, 12, 0, TAU);
+        ctx.strokeStyle = tc; ctx.lineWidth = 3; ctx.setLineDash([3, 3]); ctx.stroke();
+        ctx.restore();
+      }
+    }
   }
   // 选中图形（放在点下面，避免盖住顶点）
   if (state.selected && state.selected.kind === 'shape') {
@@ -1984,6 +2070,78 @@ function drawShapeMarks(s) {
   }
 }
 
+function drawDerivedMarks() {
+  for (const p of state.geom.points) {
+    if (!p.visible || !p.derived || p.derived.type !== 'midpoint') continue;
+    const a = getPt(p.derived.a), b = getPt(p.derived.b);
+    if (!a || !b) continue;
+    drawTicksWorld(a, p, 1, '#b45309', 4.5, .9);
+    drawTicksWorld(p, b, 1, '#b45309', 4.5, .9);
+  }
+}
+
+function drawAlphaHighlight() {
+  const info = getAlphaInfo();
+  if (!info) return;
+  const pv = w2s(info.vertex), pa = w2s(info.prev), pb = w2s(info.next);
+  const a1 = Math.atan2(pa.y - pv.y, pa.x - pv.x);
+  const a2 = Math.atan2(pb.y - pv.y, pb.x - pv.x);
+  let diff = a2 - a1;
+  while (diff > Math.PI) diff -= TAU;
+  while (diff < -Math.PI) diff += TAU;
+  const r = 38;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(pv.x, pv.y);
+  ctx.arc(pv.x, pv.y, r, a1, a1 + diff, diff < 0);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(217,119,6,.10)'; ctx.fill();
+  ctx.restore();
+  drawAngleArcsWorld(info.vertex, info.prev, info.next, 2, '#d97706', r + 2);
+  const u1 = norm(sub(pa, pv)), u2 = norm(sub(pb, pv));
+  let d = norm({ x: u1.x + u2.x, y: u1.y + u2.y });
+  if (Math.hypot(d.x, d.y) < 1e-9) d = perp(u1);
+  chip(`α = ${fmt(info.value, 2)}°`, pv.x + d.x * (r + 22), pv.y + d.y * (r + 22), '#92400e', 'rgba(255,249,237,.95)', 'center');
+}
+
+function objectCenter(kind, id) {
+  if (kind === 'point') {
+    const p = getPt(id);
+    return p ? { x: p.x, y: p.y } : null;
+  }
+  const s = getShape(id);
+  if (!s) return null;
+  const pts = shapePoints(s);
+  if (!pts.length) return null;
+  return centroidOf(pts);
+}
+
+function drawTransformLinks() {
+  for (const t of (state.geom.transforms || [])) {
+    if (!t || t.imageKind === t.sourceKind && t.imageId === t.sourceId) continue;
+    const a = objectCenter(t.sourceKind, t.sourceId);
+    const b = objectCenter(t.imageKind, t.imageId);
+    if (!a || !b) continue;
+    const pa = w2s(a), pb = w2s(b);
+    const color = t.color || '#2563eb';
+    ctx.save();
+    ctx.strokeStyle = hexA(color, .55); ctx.lineWidth = 1.2; ctx.setLineDash([4, 5]);
+    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+    ctx.restore();
+    for (const p of [pa, pb]) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, TAU);
+      ctx.fillStyle = '#fffdf9'; ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.3; ctx.stroke();
+      ctx.restore();
+    }
+    const label = t.type === 'rotate'
+      ? `旋转 ${fmt(t.angle, 2)}°`
+      : '轴对称';
+    chip(label, (pa.x + pb.x) / 2, (pa.y + pb.y) / 2 - 13, color, 'rgba(255,253,249,.95)', 'center');
+  }
+}
+
 function drawShapeHover(s, color = 'rgba(15,118,110,.55)') {
   if (!s) return;
   if (s.type === 'triangle' || s.type === 'quad') {
@@ -2120,12 +2278,19 @@ function drawPendingPreview() {
   }
   if (cur && p.length) {
     const a = p[0];
-    if (['segment', 'line', 'ray', 'perp-bisector'].includes(state.tool)) {
+    if (['segment', 'line', 'ray', 'perp-bisector', 'midpoint'].includes(state.tool)) {
       if (state.tool === 'line') drawLineWorld(a, cur, 'rgba(15,118,110,.42)', 1.4, [5, 5]);
       else if (state.tool === 'ray') drawRayWorld(a, cur, 'rgba(15,118,110,.42)', 1.4, [5, 5]);
       else {
         const pa = w2s(a), pc = w2s(cur);
         ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pc.x, pc.y); ctx.stroke();
+        if (state.tool === 'midpoint') {
+          const mp = w2s(mid(a, cur));
+          ctx.setLineDash([]);
+          ctx.beginPath(); ctx.arc(mp.x, mp.y, 4.5, 0, TAU);
+          ctx.fillStyle = 'rgba(180,83,9,.6)'; ctx.fill();
+          ctx.setLineDash([5, 5]);
+        }
       }
       ctx.setLineDash([5, 5]);
       const pc = w2s(cur);
@@ -2225,7 +2390,226 @@ function createQuad(kind, A, B, C, D) {
 
 /* ---------- 全等 / 相似匹配 ---------- */
 
-const PERMS = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+const TRANSFORM_COLORS = { rotate: '#2563eb', reflect: '#be123c' };
+
+function createMidpoint(a, b, segmentId = null) {
+  if (!a || !b) return null;
+  if (dist(a, b) < 1e-6) { toast('两点重合，无法确定中点', 'warn'); return null; }
+  const existing = state.geom.points.find(p => p.derived && p.derived.type === 'midpoint'
+    && ((p.derived.a === a.id && p.derived.b === b.id) || (p.derived.a === b.id && p.derived.b === a.id)));
+  if (existing) {
+    state.selected = { kind: 'point', id: existing.id };
+    toast(`中点 ${existing.label} 已经存在`, 'warn');
+    return existing;
+  }
+  const p = makePoint((a.x + b.x) / 2, (a.y + b.y) / 2);
+  p.derived = { type: 'midpoint', a: a.id, b: b.id, segmentId };
+  p.color = '#b45309';
+  state.selected = { kind: 'point', id: p.id };
+  toast(`已作出 ${a.label}${b.label} 的中点 ${p.label}`, 'ok');
+  return p;
+}
+
+function evalAngleExpression(expr) {
+  const alpha = getAlphaValue();
+  let s = String(expr == null ? '' : expr).trim();
+  if (!s) throw new Error('请输入旋转角表达式');
+  s = s.replace(/[°º]/g, '').replace(/[−–—]/g, '-').replace(/×/g, '*').replace(/÷/g, '/')
+    .replace(/度/g, '').replace(/阿尔法/g, 'a').replace(/α|Α/g, 'a').replace(/\balpha\b/gi, 'a')
+    .replace(/乘以|乘/g, '*').replace(/除以|除/g, '/').replace(/加/g, '+').replace(/减/g, '-');
+  const needsAlpha = /[aA]/.test(s);
+  if (needsAlpha && alpha === null) throw new Error('请先用「取角 α」把一个已有角设为 α');
+  if (!/^[0-9aA+\-*/().\s]+$/.test(s)) throw new Error('旋转角只能包含数字、α、+ − × ÷ 和括号');
+  s = s.replace(/[aA]/g, `(${alpha === null ? 0 : alpha})`);
+  let ast;
+  try { ast = parseExpression(s); }
+  catch (err) { throw new Error('旋转角表达式有误：' + err.message); }
+  const value = evalNode(ast, 0);
+  if (!Number.isFinite(value)) throw new Error('旋转角表达式没有有效结果');
+  return value;
+}
+
+function normalizeAngleDeg(v) {
+  let a = ((v % 360) + 360) % 360;
+  if (a > 180) a -= 360;
+  return a;
+}
+
+function rotateCoords(p, c, angleDeg) {
+  const t = angleDeg * DEG, dx = p.x - c.x, dy = p.y - c.y;
+  return {
+    x: c.x + dx * Math.cos(t) - dy * Math.sin(t),
+    y: c.y + dx * Math.sin(t) + dy * Math.cos(t)
+  };
+}
+
+function reflectCoords(p, a, b) {
+  const v = sub(b, a);
+  const len2 = dot(v, v);
+  if (len2 < 1e-12) return { x: p.x, y: p.y };
+  const t = dot(sub(p, a), v) / len2;
+  const foot = { x: a.x + v.x * t, y: a.y + v.y * t };
+  return { x: 2 * foot.x - p.x, y: 2 * foot.y - p.y };
+}
+
+function transformCoords(p, spec) {
+  if (!spec) return { x: p.x, y: p.y };
+  if (spec.type === 'rotate') return rotateCoords(p, spec.center, spec.angle);
+  if (spec.type === 'reflect') return reflectCoords(p, spec.a, spec.b);
+  return { x: p.x, y: p.y };
+}
+
+function polygonAtClick(sp) {
+  const p = hitTestPoint(sp, 12);
+  if (p) {
+    const shapes = state.geom.shapes.filter(s => polygonPoints(s) && s.points.includes(p.id));
+    if (shapes.length) return { shape: shapes[shapes.length - 1], point: p };
+  }
+  const s = hitTestShape(sp);
+  if (polygonPoints(s)) return { shape: s, point: null };
+  return null;
+}
+
+function nearestVertexIndex(shape, sp) {
+  const pts = shapePoints(shape);
+  let best = 0, bd = Infinity;
+  pts.forEach((p, i) => {
+    const q = w2s(p), d = Math.hypot(q.x - sp.x, q.y - sp.y);
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
+}
+
+function setAlphaAtClick(sp) {
+  const hit = polygonAtClick(sp);
+  if (!hit) { toast('请点击三角形或四边形内部 / 顶点，取其内角为 α', 'warn'); return; }
+  const idx = hit.point ? hit.shape.points.indexOf(hit.point.id) : nearestVertexIndex(hit.shape, sp);
+  const old = state.geom.alpha;
+  if (old && old.shapeId === hit.shape.id && old.vertexIndex === idx) {
+    toast('这个角已经设为 α', 'warn');
+    return;
+  }
+  pushHistory();
+  state.geom.alpha = { shapeId: hit.shape.id, vertexIndex: idx };
+  state.selected = { kind: 'shape', id: hit.shape.id };
+  const info = getAlphaInfo();
+  updateTransformUI();
+  renderAllPanels(); draw(); saveSoon();
+  toast(info ? `已取 ${info.label} = ${fmt(info.value, 2)}° 作为 α` : '已设置 α', 'ok');
+}
+
+function axisLineForShape(s) {
+  if (!s) return null;
+  const p = shapePoints(s);
+  if (p.length < 2) return null;
+  if (s.type === 'segment' || s.type === 'ray' || s.type === 'line') return [p[0], p[1]];
+  if (s.type === 'perp-bisector') {
+    const m = mid(p[0], p[1]), n = perp(sub(p[1], p[0]));
+    return [{ x: m.x - n.x, y: m.y - n.y }, { x: m.x + n.x, y: m.y + n.y }];
+  }
+  if (s.type === 'angle-bisector') {
+    const o = p[0], u = norm(sub(p[1], o)), v = norm(sub(p[2], o));
+    let d = norm({ x: u.x + v.x, y: u.y + v.y });
+    if (Math.hypot(d.x, d.y) < 1e-9) d = perp(u);
+    return [o, { x: o.x + d.x, y: o.y + d.y }];
+  }
+  return null;
+}
+
+function axisAtClick(sp) {
+  const s = lineShapeAt(sp);
+  if (s && axisLineForShape(s)) return s;
+  return null;
+}
+
+function applyTransformToTarget(spec) {
+  const target = state.transformTarget;
+  if (!target) { toast('请先选择要变换的图形或点', 'warn'); return; }
+  const targetPoint = target.kind === 'point' ? getPt(target.id) : null;
+  const targetShape = target.kind === 'shape' ? getShape(target.id) : null;
+  if (!targetPoint && !targetShape) { toast('所选对象已不存在', 'warn'); return; }
+
+  const src = targetPoint ? [targetPoint] : shapePoints(targetShape);
+  if (!src.length) { toast('所选对象没有可变换的顶点', 'warn'); return; }
+  const unique = [];
+  const seen = new Set();
+  for (const p of src) { if (!seen.has(p.id)) { seen.add(p.id); unique.push(p); } }
+  const mapped = new Map(unique.map(p => [p.id, transformCoords(p, spec)]));
+  const color = TRANSFORM_COLORS[spec.type] || '#2563eb';
+
+  pushHistory();
+  let imageKind = null, imageId = null;
+  if (state.keepOriginal) {
+    const newByOld = new Map();
+    if (targetPoint) {
+      const q = mapped.get(targetPoint.id);
+      const np = makePoint(q.x, q.y, primeLabel(targetPoint.label));
+      np.color = color;
+      np.imageOf = targetPoint.id;
+      imageKind = 'point'; imageId = np.id;
+      state.selected = { kind: 'point', id: np.id };
+    } else {
+      for (const p of unique) {
+        const q = mapped.get(p.id);
+        const np = makePoint(q.x, q.y, primeLabel(p.label));
+        np.color = color;
+        np.imageOf = p.id;
+        newByOld.set(p.id, np);
+      }
+      const img = addShape(targetShape.type, targetShape.points.map(id => newByOld.get(id)).filter(Boolean), targetShape.kind);
+      img.color = color;
+      img.imageOf = targetShape.id;
+      imageKind = 'shape'; imageId = img.id;
+      state.selected = { kind: 'shape', id: img.id };
+    }
+    state.geom.transforms = state.geom.transforms || [];
+    state.geom.transforms.push({
+      id: uid('t'), type: spec.type, sourceKind: target.kind, sourceId: target.id,
+      imageKind, imageId, angle: spec.angle, color
+    });
+  } else {
+    for (const p of unique) {
+      const q = mapped.get(p.id);
+      p.x = q.x; p.y = q.y;
+    }
+    state.selected = { kind: target.kind, id: target.id };
+  }
+
+  state.transformTarget = null;
+  updateTransformUI();
+  updateHint();
+  renderAllPanels(); draw(); saveSoon();
+  const angleText = spec.type === 'rotate' ? ` ${fmt(normalizeAngleDeg(spec.angle), 2)}°` : '';
+  toast(state.keepOriginal
+    ? `已生成${spec.type === 'rotate' ? '旋转' : '轴对称'}像${angleText}`
+    : `已直接${spec.type === 'rotate' ? '旋转' : '轴对称'}原图${angleText}`, 'ok');
+}
+
+function updateTransformUI() {
+  const readout = $('#alphaReadout');
+  const preview = $('#rotatePreview');
+  const input = $('#rotateExpr');
+  if (!readout || !preview || !input) return;
+  if (input.value !== state.rotateExpr && document.activeElement !== input) input.value = state.rotateExpr;
+  const info = getAlphaInfo();
+  if (info) {
+    readout.innerHTML = `<b>α = ${fmt(info.value, 2)}°</b><span>${esc(info.label)} · ${esc(info.shape.type === 'triangle' ? '三角形内角' : '四边形内角')}</span>`;
+  } else {
+    readout.innerHTML = '<span>未设置 · 用「取角 α」点三角形或四边形的顶点</span>';
+  }
+  try {
+    const angle = evalAngleExpression(state.rotateExpr);
+    const norm = normalizeAngleDeg(angle);
+    preview.innerHTML = `<b>旋转角 = ${fmt(angle, 2)}°</b>${Math.abs(angle) > 360 ? `（等价 ${fmt(norm, 2)}°）` : ''}<span>${esc(state.rotateExpr)}</span>`;
+    preview.classList.remove('bad');
+  } catch (err) {
+    preview.innerHTML = `<span>${esc(err.message)}</span>`;
+    preview.classList.add('bad');
+  }
+  const keep = $('#keepOriginal');
+  if (keep) keep.checked = !!state.keepOriginal;
+  $$('.angle-chip').forEach(b => b.classList.toggle('active', b.dataset.angle === state.rotateExpr));
+}
 
 function matchTriangles(A, B, mode) {
   const ma = triangleMetrics(A), mb = triangleMetrics(B);
@@ -2284,6 +2668,7 @@ function addRelationMark(mode, A, B) {
 /* ---------- 命中测试 ---------- */
 
 function hitTestPoint(sp, tol = 11) {
+  syncDerivedPoints();
   let best = null, bd = tol;
   for (const p of state.geom.points) {
     if (!p.visible) continue;
@@ -2291,6 +2676,31 @@ function hitTestPoint(sp, tol = 11) {
     if (d < bd) { bd = d; best = p; }
   }
   return best;
+}
+
+function lineShapeAt(sp) {
+  const shapes = state.geom.shapes;
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const s = shapes[i];
+    if (!s.visible) continue;
+    const pts = shapePoints(s);
+    if (s.type === 'segment' && pts.length >= 2) {
+      if (distToSegment(sp, w2s(pts[0]), w2s(pts[1])) < 9) return s;
+    } else if (s.type === 'ray' && pts.length >= 2) {
+      if (distToRay(sp, w2s(pts[0]), w2s(pts[1])) < 9) return s;
+    } else if (s.type === 'line' && pts.length >= 2) {
+      if (distToLine(sp, w2s(pts[0]), w2s(pts[1])) < 9) return s;
+    } else if (s.type === 'perp-bisector' && pts.length >= 2) {
+      const m = mid(pts[0], pts[1]), n = perp(sub(pts[1], pts[0]));
+      if (distToLine(sp, w2s({ x: m.x - n.x, y: m.y - n.y }), w2s({ x: m.x + n.x, y: m.y + n.y })) < 9) return s;
+    } else if (s.type === 'angle-bisector' && pts.length >= 3) {
+      const o = pts[0], u = norm(sub(pts[1], o)), v = norm(sub(pts[2], o));
+      let d = norm({ x: u.x + v.x, y: u.y + v.y });
+      if (Math.hypot(d.x, d.y) < 1e-9) d = perp(u);
+      if (distToRay(sp, w2s(o), w2s({ x: o.x + d.x, y: o.y + d.y })) < 9) return s;
+    }
+  }
+  return null;
 }
 
 function hitTestShape(sp) {
@@ -2351,13 +2761,14 @@ const TOOL_NAMES = {
   triangle: '一般三角形', 'right-triangle': '直角三角形', 'isosceles-triangle': '等腰三角形',
   'right-isosceles': '等腰直角三角形', equilateral: '等边三角形', square: '正方形',
   rectangle: '矩形', parallelogram: '平行四边形', rhombus: '菱形', circle: '圆',
-  'perp-bisector': '垂直平分线', 'angle-bisector': '角平分线',
+  'perp-bisector': '垂直平分线', 'angle-bisector': '角平分线', midpoint: '线段中点',
+  rotate: '旋转变换', reflect: '轴对称', 'set-alpha': '取角 α',
   congruent: '全等标记', similar: '相似标记'
 };
 
 function setMode(mode) {
   state.mode = mode;
-  state.pending = []; state.preview = null; state.markFirst = null; state.hover = null;
+  state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null; state.hover = null;
   $$('.mode-btn').forEach(b => {
     const on = b.dataset.mode === mode;
     b.classList.toggle('active', on);
@@ -2384,6 +2795,7 @@ function setMode(mode) {
   renderObjectList();
   renderAnalysis();
   renderSelection();
+  updateTransformUI();
   updateToolbarVisibility();
   updateZoomLabel();
   draw();
@@ -2401,7 +2813,7 @@ function updateModeStatus() {
 function setTab(tab) {
   if (state.mode === 'space') return;
   state.tab = tab;
-  state.pending = []; state.preview = null; state.markFirst = null;
+  state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null;
   $$('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $$('.tab-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab));
   $('#analysisSection').hidden = tab === 'geometry';
@@ -2415,6 +2827,7 @@ function setTab(tab) {
   renderObjectList();
   renderAnalysis();
   renderSelection();
+  updateTransformUI();
   updateToolbarVisibility();
   draw();
   saveSoon();
@@ -2433,9 +2846,10 @@ function updateToolbarVisibility() {
 
 function setTool(tool) {
   state.tool = tool;
-  state.pending = []; state.preview = null; state.markFirst = null;
+  state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null;
   $$('.tool').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
   updateHint();
+  updateTransformUI();
   draw();
 }
 
@@ -2458,6 +2872,23 @@ function updateHint() {
     hint.innerHTML = '<b>圆锥曲线：</b>圆、椭圆、抛物线与双曲线共用中心参数；生成后右侧会列出焦点、离心率、准线或渐近线。';
     return;
   }
+  if (state.tool === 'rotate' || state.tool === 'reflect') {
+    const first = state.tool === 'rotate' ? '旋转' : '轴对称';
+    const second = state.tool === 'rotate' ? '一个点作为旋转中心' : '一条直线 / 线段 / 射线作为对称轴';
+    if (!state.transformTarget) {
+      foot.innerHTML = `<b>提示：</b>${first}：先点击要变换的点或图形`;
+      hint.innerHTML = `<b>${first}：</b>先点击要变换的点或图形，再点击${second}。${state.keepOriginal ? '默认保留原图并生成带撇号的像。' : '当前设置为直接变换原图。'}`;
+    } else {
+      foot.innerHTML = `<b>提示：</b>已选对象 · 点击${second}`;
+      hint.innerHTML = `<b>${first}：</b>已选好要变换的对象，现在点击${second}。<br>旋转角：<b>${esc(state.rotateExpr)}</b>${state.tool === 'rotate' ? '（角度按逆时针为正）' : ''}`;
+    }
+    return;
+  }
+  if (state.tool === 'set-alpha') {
+    foot.innerHTML = '<b>提示：</b>点击三角形 / 四边形的内角，把它设为 α';
+    hint.innerHTML = '<b>取角 α：</b>点击三角形的某个内角或四边形顶点附近，系统会记录该角为 α。之后旋转角里的 α 会随该角实时更新。';
+    return;
+  }
   const map = {
     select: ['拖动顶点或整个图形；空白处拖动平移。', '点击选中对象；拖动顶点改变形状。按住 Alt 可临时关闭网格吸附。'],
     point: ['点击放置一个点；靠近已有顶点会自动吸附。', '点会被后续线段、三角形等复用，便于构造共享顶点。'],
@@ -2476,6 +2907,10 @@ function updateHint() {
     circle: ['先点击圆心，再点击圆周上一点。', '半径等于两次点击的距离；可拖动圆上的点改变半径。'],
     'perp-bisector': ['依次点击线段的两个端点，生成垂直平分线。', '平分线经过中点且与线段垂直，并标出直角与等分记号。'],
     'angle-bisector': ['依次点击顶点、第一条边上一点、第二条边上一点。', '角平分线会标出两侧相等的角弧。'],
+    midpoint: ['点击一条线段直接作中点；也可以依次点击两个点。', '中点是派生点，会随线段端点移动，并用等分刻线标出。'],
+    rotate: ['先点击要旋转的点 / 图形，再点击一个点作为旋转中心。', '旋转角支持 α 表达式。默认生成带撇号的旋转像，原图保留。'],
+    reflect: ['先点击要变换的点 / 图形，再点击一条直线作为对称轴。', '支持直线、线段、射线、垂直平分线或角平分线作为对称轴。'],
+    'set-alpha': ['点击三角形或四边形的内角，把它设为 α。', 'α 会随该角顶点拖动实时更新，可用于 180°−2α、90°−α 等旋转角。'],
     congruent: ['依次点击两个三角形，检查并标记全等。', '系统自动寻找顶点对应关系；三组对应边相等时添加相同刻度与角弧。'],
     similar: ['依次点击两个三角形，检查并标记相似。', '系统自动寻找顶点对应关系；对应角相等时添加相同角弧并显示相似比。']
   };
@@ -2512,14 +2947,17 @@ function renderObjectList() {
     });
   } else {
     for (const s of state.geom.shapes) {
-      items.push({ kind: 'shape', id: s.id, color: shapeColor(s), visible: s.visible, name: shapeLabel(s), sub: '图形' });
+      items.push({ kind: 'shape', id: s.id, color: shapeColor(s), visible: s.visible, name: shapeLabel(s), sub: s.imageOf ? '变换像' : '图形' });
     }
     for (const m of state.geom.marks) {
       const A = getShape(m.a), B = getShape(m.b);
       items.push({ kind: 'mark', id: m.id, color: m.color, visible: m.visible, name: `${m.type === 'congruent' ? '≅ 全等' : '∽ 相似'}：${A ? shapeLabel(A).split(' ').slice(-1)[0] : ''} / ${B ? shapeLabel(B).split(' ').slice(-1)[0] : ''}`, sub: '关系标记' });
     }
     for (const p of state.geom.points) {
-      items.push({ kind: 'point', id: p.id, color: p.color || GEO_COLORS.point, visible: p.visible, name: p.label, sub: `(${fmt(p.x, 2)}, ${fmt(p.y, 2)})` });
+      const sub = p.derived && p.derived.type === 'midpoint'
+        ? `中点 · ${(getPt(p.derived.a) || {}).label || '?'}${(getPt(p.derived.b) || {}).label || '?'}`
+        : p.imageOf ? `像点 · (${fmt(p.x, 2)}, ${fmt(p.y, 2)})` : `(${fmt(p.x, 2)}, ${fmt(p.y, 2)})`;
+      items.push({ kind: 'point', id: p.id, color: p.color || GEO_COLORS.point, visible: p.visible, name: p.label, sub });
     }
   }
   if (meta) meta.textContent = String(items.length);
@@ -2622,6 +3060,7 @@ function fmtCoef(v) {
 }
 
 function renderSelection() {
+  syncDerivedPoints();
   const box = $('#selectionBox');
   const meta = $('#selMeta');
   const section = $('#selectionSection');
@@ -2642,11 +3081,18 @@ function renderSelection() {
     if (!p) { state.selected = null; return renderSelection(); }
     meta.textContent = '点 ' + p.label;
     const related = state.geom.shapes.filter(s => s.points.includes(p.id)).map(s => shapeLabel(s));
-    box.innerHTML = `<div class="sel-title">点 ${esc(p.label)} <span class="pill">POINT</span></div>
-      <div class="sel-sub">拖动该点可以改变所有与它相连的图形。</div>
+    const mid = p.derived && p.derived.type === 'midpoint' ? {
+      a: getPt(p.derived.a), b: getPt(p.derived.b)
+    } : null;
+    box.innerHTML = `<div class="sel-title">点 ${esc(p.label)} <span class="pill">${mid ? 'MIDPOINT' : p.imageOf ? 'IMAGE' : 'POINT'}</span></div>
+      <div class="sel-sub">${mid ? '线段中点：由两端点唯一确定，拖动端点时自动同步。' : p.imageOf ? '该点是变换得到的像点。' : '拖动该点可以改变所有与它相连的图形。'}</div>
       <div class="measure-row"><span>x 坐标</span><b>${fmt(p.x, 4)}</b></div>
       <div class="measure-row"><span>y 坐标</span><b>${fmt(p.y, 4)}</b></div>
+      ${mid ? `<div class="measure-row"><span>所属线段</span><b class="txt">${esc((mid.a ? mid.a.label : '?') + (mid.b ? mid.b.label : '?'))} 的中点</b></div>` : ''}
       <div class="measure-row"><span>关联图形</span><b class="txt">${related.length ? esc(related.join('、')) : '—'}</b></div>`;
+    if (mid && mid.a && mid.b) {
+      box.innerHTML += `<div class="mark-note">已知 ${esc(mid.a.label)}、${esc(mid.b.label)}，${esc(p.label)} 满足 ${esc(mid.a.label + p.label)} = ${esc(p.label + mid.b.label)}。</div>`;
+    }
     return;
   }
   if (sel.kind === 'shape') {
@@ -2683,7 +3129,7 @@ function renderSelection() {
 }
 
 function shapeDetailHTML(s) {
-  const head = `<div class="sel-title">${esc(shapeLabel(s))} <span class="pill">${s.type === 'triangle' ? 'TRIANGLE' : s.type === 'quad' ? 'QUADRILATERAL' : s.type === 'circle' ? 'CIRCLE' : s.type === 'segment' ? 'SEGMENT' : s.type === 'ray' ? 'RAY' : s.type === 'line' ? 'LINE' : 'CONSTRUCTION'}</span></div>`;
+  const head = `<div class="sel-title">${esc(shapeLabel(s))} <span class="pill">${s.type === 'triangle' ? 'TRIANGLE' : s.type === 'quad' ? 'QUADRILATERAL' : s.type === 'circle' ? 'CIRCLE' : s.type === 'segment' ? 'SEGMENT' : s.type === 'ray' ? 'RAY' : s.type === 'line' ? 'LINE' : 'CONSTRUCTION'}</span>${s.imageOf ? '<span class="pill" style="color:#2563eb;background:#eaf1ff">变换像</span>' : ''}</div>`;
   if (s.type === 'triangle') {
     const m = triangleMetrics(s);
     if (!m) return head;
@@ -2750,9 +3196,11 @@ function shapeDetailHTML(s) {
 }
 
 function renderAllPanels() {
+  syncDerivedPoints();
   renderObjectList();
   renderAnalysis();
   renderSelection();
+  updateTransformUI();
   updateToolbarVisibility();
 }
 
@@ -3028,6 +3476,60 @@ function refsClose(a, b) { return Math.abs(a.x - b.x) < 1e-4 && Math.abs(a.y - b
 function handleToolClick(sp) {
   const tool = state.tool;
   if (tool === 'select') { selectAt(sp); return; }
+  if (tool === 'midpoint') {
+    const seg = lineShapeAt(sp);
+    if (state.pending.length === 0 && seg && seg.type === 'segment') {
+      const pts = shapePoints(seg);
+      if (pts.length >= 2) {
+        pushHistory();
+        createMidpoint(pts[0], pts[1], seg.id);
+        renderAllPanels(); draw(); saveSoon();
+        return;
+      }
+    }
+    const ref = snapWorld(sp, false);
+    state.pending.push({ x: ref.x, y: ref.y, pid: ref.pid });
+    if (state.pending.length < 2) {
+      draw();
+      toast('再点击线段的另一个端点', '');
+      return;
+    }
+    const refs = state.pending.slice();
+    state.pending = []; state.preview = null;
+    completeShape('midpoint', refs);
+    return;
+  }
+  if (tool === 'set-alpha') {
+    setAlphaAtClick(sp);
+    return;
+  }
+  if (tool === 'rotate' || tool === 'reflect') {
+    if (!state.transformTarget) {
+      const p = hitTestPoint(sp, 12);
+      const s = p ? null : hitTestShape(sp);
+      if (!p && !s) { toast('请先点击要变换的点或图形', 'warn'); return; }
+      state.transformTarget = p ? { kind: 'point', id: p.id } : { kind: 'shape', id: s.id };
+      state.selected = { kind: state.transformTarget.kind, id: state.transformTarget.id };
+      updateHint(); renderAllPanels(); draw();
+      toast(tool === 'rotate' ? '已选图形，请点击一个点作为旋转中心。' : '已选图形，请点击一条直线 / 线段 / 射线作为对称轴。', '');
+      return;
+    }
+    if (tool === 'rotate') {
+      const center = hitTestPoint(sp, 13);
+      if (!center) { toast('旋转中心必须是已有的点；可先作出一个点再旋转。', 'warn'); return; }
+      let angle;
+      try { angle = evalAngleExpression(state.rotateExpr); }
+      catch (err) { toast(err.message, 'warn'); return; }
+      applyTransformToTarget({ type: 'rotate', center: { x: center.x, y: center.y }, angle });
+    } else {
+      const axis = axisAtClick(sp);
+      if (!axis) { toast('请点击一条直线、线段、射线或平分线作为对称轴。', 'warn'); return; }
+      const line = axisLineForShape(axis);
+      if (!line) { toast('这条线不能作为对称轴。', 'warn'); return; }
+      applyTransformToTarget({ type: 'reflect', a: line[0], b: line[1] });
+    }
+    return;
+  }
   if (tool === 'congruent' || tool === 'similar') {
     const tri = triangleAt(sp);
     if (!tri) { toast('请点击一个三角形内部', 'warn'); return; }
@@ -3079,7 +3581,11 @@ function completeShape(tool, refs) {
   for (let i = 0; i < refs.length; i++) for (let j = i + 1; j < refs.length; j++) {
     if (refsClose(refs[i], refs[j])) { toast('所点的点不能重合', 'warn'); draw(); return; }
   }
-  if (tool === 'segment' || tool === 'ray' || tool === 'line') {
+  if (tool === 'midpoint') {
+    pushHistory();
+    const A = resolveRef(refs[0]), B = resolveRef(refs[1]);
+    createMidpoint(A, B);
+  } else if (tool === 'segment' || tool === 'ray' || tool === 'line') {
     pushHistory();
     const A = resolveRef(refs[0]), B = resolveRef(refs[1]);
     const s = addShape(tool, [A, B]);
@@ -3153,9 +3659,9 @@ function selectAt(sp) {
 }
 
 function cancelPending() {
-  const had = state.pending.length || state.markFirst;
-  state.pending = []; state.preview = null; state.markFirst = null;
-  if (had) { draw(); toast('已取消当前操作'); }
+  const had = state.pending.length || state.markFirst || state.transformTarget;
+  state.pending = []; state.preview = null; state.markFirst = null; state.transformTarget = null;
+  if (had) { updateHint(); updateTransformUI(); draw(); toast('已取消当前操作'); }
   else if (state.selected) { state.selected = null; renderAllPanels(); draw(); }
 }
 
@@ -3179,13 +3685,33 @@ function deleteGeomObjectSilent(kind, id) {
   if (kind === 'shape') {
     state.geom.marks = state.geom.marks.filter(m => m.a !== id && m.b !== id);
     state.geom.shapes = state.geom.shapes.filter(s => s.id !== id);
+    state.geom.transforms = (state.geom.transforms || []).filter(t => t.sourceId !== id && t.imageId !== id);
+    if (state.geom.alpha && state.geom.alpha.shapeId === id) state.geom.alpha = null;
     return;
   }
   if (kind === 'point') {
-    const deadShapes = new Set(state.geom.shapes.filter(s => s.points.includes(id)).map(s => s.id));
+    const deadPoints = new Set([id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const p of state.geom.points) {
+        if (p.derived && (deadPoints.has(p.derived.a) || deadPoints.has(p.derived.b)) && !deadPoints.has(p.id)) {
+          deadPoints.add(p.id);
+          changed = true;
+        }
+      }
+    }
+    const deadShapes = new Set(state.geom.shapes.filter(s => s.points.some(pid => deadPoints.has(pid))).map(s => s.id));
     state.geom.marks = state.geom.marks.filter(m => !deadShapes.has(m.a) && !deadShapes.has(m.b));
     state.geom.shapes = state.geom.shapes.filter(s => !deadShapes.has(s.id));
-    state.geom.points = state.geom.points.filter(p => p.id !== id);
+    state.geom.points = state.geom.points.filter(p => !deadPoints.has(p.id));
+    state.geom.transforms = (state.geom.transforms || []).filter(t =>
+      !(t.sourceKind === 'point' && deadPoints.has(t.sourceId)) &&
+      !(t.imageKind === 'point' && deadPoints.has(t.imageId)) &&
+      !(t.sourceKind === 'shape' && deadShapes.has(t.sourceId)) &&
+      !(t.imageKind === 'shape' && deadShapes.has(t.imageId))
+    );
+    if (state.geom.alpha && deadShapes.has(state.geom.alpha.shapeId)) state.geom.alpha = null;
   }
 }
 
@@ -3248,10 +3774,12 @@ function onPointerDown(e) {
     const p = hitTestPoint(sp, 12);
     if (p) {
       state.selected = { kind: 'point', id: p.id };
-      state.drag = {
-        type: 'point', id: p.id, sx: sp.x, sy: sp.y,
-        ox: p.x, oy: p.y, moved: false, pushed: false
-      };
+      state.drag = p.derived
+        ? { type: 'derived', id: p.id, sx: sp.x, sy: sp.y, moved: false }
+        : {
+          type: 'point', id: p.id, sx: sp.x, sy: sp.y,
+          ox: p.x, oy: p.y, moved: false, pushed: false
+        };
       renderAllPanels(); draw();
       return;
     }
@@ -3365,6 +3893,7 @@ function onPointerUp(e) {
     handleToolClick(sp);
   }
   if (d.type === 'orbit' || d.type === 'pan' || d.type === 'point' || d.type === 'shape') saveSoon();
+  if (d.type === 'point' || d.type === 'shape') updateTransformUI();
   updateToolbarVisibility();
   draw();
 }
@@ -3404,10 +3933,12 @@ function clearGeometry(silent = false) {
   state.geom.points = [];
   state.geom.shapes = [];
   state.geom.marks = [];
+  state.geom.transforms = [];
+  state.geom.alpha = null;
   state.geom.nextLabel = 0;
   state.selected = null;
-  state.pending = []; state.markFirst = null; state.preview = null;
-  renderAllPanels(); draw(); saveSoon();
+  state.pending = []; state.markFirst = null; state.transformTarget = null; state.preview = null;
+  updateTransformUI(); renderAllPanels(); draw(); saveSoon();
   if (!silent) toast('已清空几何作图（可撤销）');
 }
 
@@ -3481,6 +4012,7 @@ function syncUidCounter() {
   state.geom.points.forEach(p => ids.push(p.id));
   state.geom.shapes.forEach(s => ids.push(s.id));
   state.geom.marks.forEach(m => ids.push(m.id));
+  (state.geom.transforms || []).forEach(t => ids.push(t.id));
   state.space.points.forEach(p => ids.push(p.id));
   let max = 0;
   for (const id of ids) {
@@ -3509,6 +4041,8 @@ function saveState() {
       conicType: state.conicType,
       conicParams: state.conicParams,
       calc: state.calc,
+      rotateExpr: state.rotateExpr,
+      keepOriginal: state.keepOriginal,
       geom: state.geom,
       space: {
         yaw: state.space.yaw, pitch: state.space.pitch, zoom: state.space.zoom,
@@ -3552,13 +4086,18 @@ function restoreState() {
     if (data.curve && data.curve.kind) state.curve = data.curve;
     if (data.conicResult && data.conicResult.kind) state.conicResult = data.conicResult;
     if (data.calc && typeof data.calc === 'object') state.calc = data.calc;
+    if (typeof data.rotateExpr === 'string' && data.rotateExpr.trim()) state.rotateExpr = data.rotateExpr;
+    if (typeof data.keepOriginal === 'boolean') state.keepOriginal = data.keepOriginal;
     if (data.geom && Array.isArray(data.geom.points)) {
-      state.geom = Object.assign({ points: [], shapes: [], marks: [], nextLabel: 0, snap: true, showLabels: true }, data.geom);
+      state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true }, data.geom);
       if (!Array.isArray(state.geom.shapes)) state.geom.shapes = [];
       if (!Array.isArray(state.geom.marks)) state.geom.marks = [];
+      if (!Array.isArray(state.geom.transforms)) state.geom.transforms = [];
+      if (!state.geom.alpha || typeof state.geom.alpha !== 'object') state.geom.alpha = null;
       state.geom.snap = data.geom.snap !== false;
       state.geom.showLabels = data.geom.showLabels !== false;
       if (typeof state.geom.nextLabel !== 'number') state.geom.nextLabel = state.geom.points.length;
+      syncDerivedPoints();
     }
     if (data.space && Array.isArray(data.space.points)) {
       state.space.points = data.space.points.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z));
@@ -3620,6 +4159,30 @@ function bindUI() {
   $('#conicBtn').addEventListener('click', generateConic);
 
   $$('.tool').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+  $('#rotateExpr').addEventListener('input', e => {
+    state.rotateExpr = e.target.value;
+    updateTransformUI();
+    saveSoon();
+  });
+  $$('.angle-chip').forEach(b => b.addEventListener('click', () => {
+    state.rotateExpr = b.dataset.angle;
+    $('#rotateExpr').value = state.rotateExpr;
+    updateTransformUI();
+    saveSoon();
+  }));
+  $('#keepOriginal').addEventListener('change', e => {
+    state.keepOriginal = e.target.checked;
+    updateHint();
+    saveSoon();
+  });
+  $('#setAlphaBtn').addEventListener('click', () => setTool('set-alpha'));
+  $('#clearAlpha').addEventListener('click', () => {
+    if (!state.geom.alpha) return;
+    pushHistory();
+    state.geom.alpha = null;
+    updateTransformUI(); renderAllPanels(); draw(); saveSoon();
+    toast('已清除 α 引用', '');
+  });
   $('#snapToggle').addEventListener('change', e => { state.geom.snap = e.target.checked; saveSoon(); });
   $('#labelToggle').addEventListener('change', e => { state.geom.showLabels = e.target.checked; draw(); saveSoon(); });
   $('#demoCongruent').addEventListener('click', () => loadDemo('congruent'));
