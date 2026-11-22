@@ -51,7 +51,7 @@ const state = {
   keepOriginal: true,
   geom: {
     points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0,
-    snap: true, showLabels: true
+    snap: true, showLabels: true, horizontalBase: true
   },
   selected: null,
   hover: null,
@@ -1645,6 +1645,86 @@ function triangleMetrics(shape) {
   return { pts: p, labels: p.map(q => q.label), sides, angles, area, perimeter, eq, iso, right, className };
 }
 
+function isoscelesApexInfo(shape) {
+  if (!shape || shape.type !== 'triangle') return null;
+  const pts = shapePoints(shape);
+  if (pts.length < 3) return null;
+  let idx = null;
+  if (shape.kind === 'isosceles-triangle' || shape.kind === 'equilateral') idx = 2;
+  else if (shape.kind === 'right-isosceles') idx = 0;
+  if (idx === null) {
+    const m = triangleMetrics(shape);
+    if (!m) return null;
+    const s = m.sides;
+    const cand = [
+      { i: 0, d: Math.abs(s[1] - s[2]) },
+      { i: 1, d: Math.abs(s[0] - s[2]) },
+      { i: 2, d: Math.abs(s[0] - s[1]) }
+    ].sort((a, b) => a.d - b.d);
+    if (cand[0].d <= 0.025 * Math.max(...s, 1e-9)) idx = cand[0].i;
+  }
+  if (idx === null) return null;
+  const base = [0, 1, 2].filter(i => i !== idx);
+  const v = pts[idx], a = pts[base[0]], b = pts[base[1]];
+  if (!v || !a || !b) return null;
+  const angle = deg(angleAt(v, a, b));
+  if (!Number.isFinite(angle)) return null;
+  return { index: idx, base0: base[0], base1: base[1], pts, vertex: v, a, b, angle };
+}
+
+function apexEditorHTML(shape) {
+  const info = isoscelesApexInfo(shape);
+  if (!info) return '';
+  const labels = info.pts.map(p => p.label);
+  return `<div class="apex-editor">
+    <div class="apex-editor-head"><b>编辑顶角</b><span>底边 ${esc(labels[info.base0] + labels[info.base1])} 保持不动</span></div>
+    <div class="apex-input-row">
+      <input id="apexAngleInput" type="number" min="2" max="178" step="0.1" value="${fmt(info.angle, 2)}" aria-label="等腰三角形顶角">
+      <span class="deg">°</span>
+      <button class="btn" id="applyApex">应用</button>
+    </div>
+    <div class="angle-chips">
+      <button class="angle-chip" data-apex-angle="60">60°</button>
+      <button class="angle-chip" data-apex-angle="90">90°</button>
+      <button class="angle-chip" data-apex-angle="120">120°</button>
+      <button class="angle-chip" data-apex-angle="30">30°</button>
+    </div>
+    <div class="apex-hint">顶点 ${esc(labels[info.index])} 会沿底边 ${esc(labels[info.base0] + labels[info.base1])} 的中垂线移动，两腰仍然相等。</div>
+  </div>`;
+}
+
+function applyApexAngle(value) {
+  const sel = state.selected;
+  if (!sel || sel.kind !== 'shape') { toast('请先选中一个等腰三角形', 'warn'); return; }
+  const s = getShape(sel.id);
+  const info = isoscelesApexInfo(s);
+  if (!info) { toast('选中的图形不是可编辑顶角的三角形', 'warn'); return; }
+  const angle = Number(value);
+  if (!Number.isFinite(angle)) { toast('请输入有效的顶角角度', 'warn'); return; }
+  if (angle < 2 || angle > 178) { toast('顶角需要在 2° 到 178° 之间', 'warn'); return; }
+  const A = info.a, B = info.b, C = info.vertex;
+  const baseLen = dist(A, B);
+  if (baseLen < 1e-6) { toast('底边太短，无法设置顶角', 'warn'); return; }
+  const m = mid(A, B);
+  let n = norm(perp(sub(B, A)));
+  const side = dot(sub(C, m), n);
+  if (side < 0) n = mul(n, -1);
+  else if (Math.abs(side) < 1e-9 && n.y < 0) n = mul(n, -1);
+  const h = (baseLen / 2) / Math.tan(rad(angle) / 2);
+  if (!Number.isFinite(h)) { toast('无法计算顶角位置', 'warn'); return; }
+  pushHistory();
+  C.x = m.x + n.x * h;
+  C.y = m.y + n.y * h;
+  syncDerivedPoints();
+  renderAllPanels(); draw(); saveSoon();
+  toast(`已把顶角 ${info.pts[info.index].label} 设为 ${fmt(angle, 2)}°`, 'ok');
+}
+
+function applyApexFromUI(value) {
+  const input = $('#apexAngleInput');
+  applyApexAngle(value === undefined ? (input ? parseFloat(input.value) : NaN) : value);
+}
+
 function quadMetrics(shape) {
   const p = shapePoints(shape);
   if (p.length < 4) return null;
@@ -1683,7 +1763,7 @@ function pushHistory() {
 function restoreGeom(str) {
   try {
     const g = JSON.parse(str);
-    state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true }, g);
+    state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true, horizontalBase: true }, g);
     if (!Array.isArray(state.geom.transforms)) state.geom.transforms = [];
     if (!getPtVisibleSelection()) state.selected = null;
     state.pending = []; state.markFirst = null; state.transformTarget = null; state.preview = null;
@@ -2315,7 +2395,8 @@ function drawPendingPreview() {
         drawPolyline(poly.concat([poly[0]]), 'rgba(15,118,110,.55)', 1.5, 'rgba(15,118,110,.04)', [5, 5]);
       }
     } else if (['right-triangle', 'isosceles-triangle', 'right-isosceles', 'equilateral'].includes(state.tool)) {
-      const tri = autoTrianglePoints(p[0], cur, state.tool);
+      const base = horizontalTriangleBase([p[0], cur]);
+      const tri = autoTrianglePoints(base[0], base[1], state.tool);
       if (tri) {
         const poly = tri.map(w2s);
         drawPolyline(poly.concat([poly[0]]), 'rgba(15,118,110,.55)', 1.5, 'rgba(15,118,110,.04)', [5, 5]);
@@ -2332,6 +2413,23 @@ function drawPendingPreview() {
 }
 
 /* ---------- 自动图形计算 ---------- */
+
+function horizontalTriangleBase(refs) {
+  if (!state.geom.horizontalBase || refs.length < 2) return refs.slice(0, 2);
+  const y = refs[0].y;
+  const x1 = Math.min(refs[0].x, refs[1].x);
+  const x2 = Math.max(refs[0].x, refs[1].x);
+  const keep = (ref, x) => ({ x, y, pid: Math.abs(ref.x - x) < 1e-9 && Math.abs(ref.y - y) < 1e-9 ? ref.pid : null });
+  return [keep(refs[0], x1), keep(refs[1], x2)];
+}
+
+function resolveAutoBasePoint(ref, desired) {
+  if (ref.pid) {
+    const p = getPt(ref.pid);
+    if (p && Math.abs(p.x - desired.x) < 1e-9 && Math.abs(p.y - desired.y) < 1e-9) return p;
+  }
+  return makePoint(desired.x, desired.y);
+}
 
 function upwardNormal(v) {
   let n = norm(perp(v));
@@ -2917,12 +3015,16 @@ function updateHint() {
   const m = map[state.tool] || map.select;
   foot.innerHTML = `<b>提示：</b>${m[0]}`;
   hint.innerHTML = `<b>${TOOL_NAMES[state.tool] || '选择'}：</b>${m[1]}`;
+  if (state.geom.horizontalBase && ['right-triangle', 'isosceles-triangle', 'right-isosceles', 'equilateral'].includes(state.tool)) {
+    hint.innerHTML += '<br><span style="color:#0f766e">底边水平已开启：第二次点击只决定长度，底边高度沿用第一次点击的位置。</span>';
+  }
 }
 
 function syncSnapToggles() {
-  const snap = $('#snapToggle'), labels = $('#labelToggle');
+  const snap = $('#snapToggle'), labels = $('#labelToggle'), hb = $('#horizontalBase');
   if (snap) snap.checked = !!state.geom.snap;
   if (labels) labels.checked = !!state.geom.showLabels;
+  if (hb) hb.checked = state.geom.horizontalBase !== false;
 }
 
 function renderObjectList() {
@@ -3138,7 +3240,8 @@ function shapeDetailHTML(s) {
       <div class="measure-row"><span>∠A / ∠B / ∠C</span><b>${fmt(m.angles[0], 2)}° / ${fmt(m.angles[1], 2)}° / ${fmt(m.angles[2], 2)}°</b></div>
       <div class="measure-row"><span>周长</span><b>${fmt(m.perimeter, 3)}</b></div>
       <div class="measure-row"><span>面积</span><b>${fmt(m.area, 3)}</b></div>
-      <div class="measure-row"><span>判定</span><b class="txt">${m.eq ? '三边相等' : m.iso ? '两边相等' : '三边不等'}${m.right ? ' · 含直角' : ''}</b></div>`;
+      <div class="measure-row"><span>判定</span><b class="txt">${m.eq ? '三边相等' : m.iso ? '两边相等' : '三边不等'}${m.right ? ' · 含直角' : ''}</b></div>
+      ${apexEditorHTML(s)}`;
   }
   if (s.type === 'quad') {
     const m = quadMetrics(s);
@@ -3619,10 +3722,11 @@ function completeShape(tool, refs) {
     createTriangle('triangle', A, B, C);
     toast('已创建三角形，可拖动顶点调整。', 'ok');
   } else if (['right-triangle', 'isosceles-triangle', 'right-isosceles', 'equilateral'].includes(tool)) {
-    const pos = autoTrianglePoints(refs[0], refs[1], tool);
+    const base = horizontalTriangleBase(refs);
+    const pos = autoTrianglePoints(base[0], base[1], tool);
     if (!pos) { toast('两个点距离太近', 'warn'); return; }
     pushHistory();
-    const A = resolveRef(refs[0]), B = resolveRef(refs[1]);
+    const A = resolveAutoBasePoint(refs[0], base[0]), B = resolveAutoBasePoint(refs[1], base[1]);
     const C = makePoint(pos[2].x, pos[2].y);
     createTriangle(tool, A, B, C);
     toast(`已创建${TOOL_NAMES[tool]}，可拖动顶点调整。`, 'ok');
@@ -4089,13 +4193,14 @@ function restoreState() {
     if (typeof data.rotateExpr === 'string' && data.rotateExpr.trim()) state.rotateExpr = data.rotateExpr;
     if (typeof data.keepOriginal === 'boolean') state.keepOriginal = data.keepOriginal;
     if (data.geom && Array.isArray(data.geom.points)) {
-      state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true }, data.geom);
+      state.geom = Object.assign({ points: [], shapes: [], marks: [], transforms: [], alpha: null, nextLabel: 0, snap: true, showLabels: true, horizontalBase: true }, data.geom);
       if (!Array.isArray(state.geom.shapes)) state.geom.shapes = [];
       if (!Array.isArray(state.geom.marks)) state.geom.marks = [];
       if (!Array.isArray(state.geom.transforms)) state.geom.transforms = [];
       if (!state.geom.alpha || typeof state.geom.alpha !== 'object') state.geom.alpha = null;
       state.geom.snap = data.geom.snap !== false;
       state.geom.showLabels = data.geom.showLabels !== false;
+      state.geom.horizontalBase = data.geom.horizontalBase !== false;
       if (typeof state.geom.nextLabel !== 'number') state.geom.nextLabel = state.geom.points.length;
       syncDerivedPoints();
     }
@@ -4185,6 +4290,7 @@ function bindUI() {
   });
   $('#snapToggle').addEventListener('change', e => { state.geom.snap = e.target.checked; saveSoon(); });
   $('#labelToggle').addEventListener('change', e => { state.geom.showLabels = e.target.checked; draw(); saveSoon(); });
+  $('#horizontalBase').addEventListener('change', e => { state.geom.horizontalBase = e.target.checked; updateHint(); draw(); saveSoon(); });
   $('#demoCongruent').addEventListener('click', () => loadDemo('congruent'));
   $('#demoSimilar').addEventListener('click', () => loadDemo('similar'));
   $('#clearGeom').addEventListener('click', () => clearGeometry(false));
@@ -4210,6 +4316,18 @@ function bindUI() {
   $('#analysisBox').addEventListener('click', e => {
     const b = e.target.closest('[data-copy]');
     if (b) copyText(b.dataset.copy);
+  });
+
+  $('#selectionBox').addEventListener('click', e => {
+    const preset = e.target.closest('[data-apex-angle]');
+    if (preset) { applyApexFromUI(parseFloat(preset.dataset.apexAngle)); return; }
+    if (e.target.closest('#applyApex')) applyApexFromUI();
+  });
+  $('#selectionBox').addEventListener('keydown', e => {
+    if (e.target && e.target.id === 'apexAngleInput' && e.key === 'Enter') {
+      e.preventDefault();
+      applyApexFromUI();
+    }
   });
 
   $('#addSpacePoint').addEventListener('click', addSpacePoint);

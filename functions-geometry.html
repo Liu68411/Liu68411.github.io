@@ -135,6 +135,20 @@
   .rotate-preview span{display:block;font-family:"Cambria Math",Georgia,serif;color:#9a8f7a}
   .rotate-preview.bad{background:#fff7f7;border-color:#fecaca;color:#b91c1c}
   .rotate-preview.bad span{font-family:inherit;color:#b91c1c}
+  .apex-editor{margin-top:10px;padding:9px;border:1px solid #d8ece6;border-radius:9px;background:#f4fbf9}
+  .apex-editor-head{display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:6px}
+  .apex-editor-head b{font-size:10.5px;color:#0b5f58;letter-spacing:.02em}
+  .apex-editor-head span{font-size:8.5px;color:#7aa39b}
+  .apex-input-row{display:flex;align-items:center;gap:5px}
+  .apex-input-row input{flex:1;min-width:0;border:1px solid #c9e3dc;border-radius:7px;background:#fff;padding:6px 8px;font-family:"Cambria Math",Georgia,serif;font-size:13px;color:var(--ink);outline:0}
+  .apex-input-row input:focus{border-color:var(--teal);box-shadow:0 0 0 2px rgba(15,118,110,.1)}
+  .apex-input-row .deg{font-family:"Cambria Math",Georgia,serif;font-size:12px;color:#7a9a93;margin-left:-2px}
+  .apex-input-row .btn{padding:6px 9px;background:var(--teal);border-color:var(--teal);color:#fff;font-size:10px}
+  .apex-input-row .btn:hover{background:#0b5f58;color:#fff}
+  .apex-editor .angle-chips{margin-top:6px}
+  .apex-editor .angle-chip{background:#fff;border-color:#d5e8e3;color:#4d7a72}
+  .apex-editor .angle-chip:hover{border-color:var(--teal);background:#effaf7;color:var(--teal)}
+  .apex-hint{font-size:8.5px;color:#7a9a93;line-height:1.55;margin-top:6px}
   .inline-fields{display:flex;gap:7px;align-items:flex-end}
   .inline-fields .f{flex:1;min-width:0}
   .inline-fields label{display:block;font-size:9.5px;font-weight:800;color:#9a8f7a;margin-bottom:3px}
@@ -155,6 +169,8 @@
   .group-label::after{content:"";height:1px;background:var(--line);flex:1}
   .tool-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
   .tool-grid.five{grid-template-columns:repeat(5,1fr)}
+  .auto-option{display:flex;align-items:center;gap:5px;font-size:9.5px;color:#8b8272;margin-top:6px;padding:5px 7px;border-radius:6px;background:#fbf8f1;border:1px solid #eee5d5;cursor:pointer;user-select:none}
+  .auto-option input{width:12px;height:12px;accent-color:var(--teal);margin:0}
   .tool{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid #e8e0d1;background:#fffdf9;border-radius:9px;padding:7px 2px 6px;cursor:pointer;color:#6b6253;transition:.15s;min-height:52px}
   .tool svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
   .tool span{font-size:9px;font-weight:700;line-height:1.2;text-align:center;letter-spacing:-.02em}
@@ -341,7 +357,7 @@
     <div>
       <div class="kicker">FUNCTION &amp; GEOMETRY STUDIO</div>
       <h1>画函数，<em>也画几何</em></h1>
-      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形作中点、旋转、轴对称等可拖动的几何研究。</p>
+      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形作中点、旋转、轴对称，并可编辑等腰三角形的顶角。</p>
     </div>
     <div class="hero-side">
       <div><i></i>三种画布：平面 / 空间 / 空白</div>
@@ -478,6 +494,7 @@
                 <svg viewBox="0 0 24 24"><path d="M12 3L21 19H3L12 3z"/><path d="M8 19v3M16 19v3M12 3v70" opacity=".35"/></svg><span>等边</span>
               </button>
             </div>
+            <label class="check auto-option"><input type="checkbox" id="horizontalBase" checked>自动三角形底边保持水平（正放）</label>
           </div>
 
           <div class="tool-group">
