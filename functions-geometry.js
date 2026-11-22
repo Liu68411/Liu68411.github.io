@@ -1568,6 +1568,15 @@ function getAlphaInfo() {
   const a = state.geom.alpha;
   if (!a) return null;
   const s = getShape(a.shapeId);
+  if (!s) return null;
+  if (s.type === 'angle') {
+    const pts = shapePoints(s);
+    if (pts.length < 3) return null;
+    const [prev, v, next] = pts;
+    const value = deg(angleAt(v, prev, next));
+    if (!Number.isFinite(value)) return null;
+    return { value, shape: s, pts, vertexIndex: 1, vertex: v, prev, next, label: `∠${prev.label}${v.label}${next.label}` };
+  }
   const pts = polygonPoints(s);
   if (!pts || !Number.isInteger(a.vertexIndex) || a.vertexIndex < 0 || a.vertexIndex >= pts.length) return null;
   const i = a.vertexIndex, n = pts.length;
@@ -1591,6 +1600,7 @@ function shapeColor(shape) {
   if (shape.type === 'triangle') return GEO_COLORS.triangle;
   if (shape.type === 'quad') return GEO_COLORS.quad;
   if (shape.type === 'circle') return GEO_COLORS.circle;
+  if (shape.type === 'angle') return GEO_COLORS.bisector;
   if (shape.type === 'perp-bisector' || shape.type === 'angle-bisector') return GEO_COLORS.bisector;
   return GEO_COLORS.line;
 }
@@ -1614,6 +1624,7 @@ function shapeLabel(shape) {
   if (shape.type === 'line') return `直线 ${labels}`;
   if (shape.type === 'perp-bisector') return `${labels} 的垂直平分线`;
   if (shape.type === 'angle-bisector') return `∠${pts[1] ? pts[1].label : ''}${pts[0] ? pts[0].label : ''}${pts[2] ? pts[2].label : ''} 的角平分线`;
+  if (shape.type === 'angle') return `∠${pts[0] ? pts[0].label : ''}${pts[1] ? pts[1].label : ''}${pts[2] ? pts[2].label : ''}`;
   return shape.type;
 }
 
@@ -2191,6 +2202,21 @@ function drawShapeBase(s) {
       ctx.fillText('r', m.x + 4, m.y - 4);
       ctx.restore();
     }
+  } else if (s.type === 'angle') {
+    const p = shapePoints(s);
+    if (p.length >= 3) {
+      drawPolyline([p[1], p[0]].map(w2s), color, 2.1);
+      drawPolyline([p[1], p[2]].map(w2s), color, 2.1);
+      drawAngleArcsWorld(p[1], p[0], p[2], 1, color, 22);
+      if (!(state.geom.alpha && state.geom.alpha.shapeId === s.id)) {
+        const mark = deg(angleAt(p[1], p[0], p[2]));
+        const pv = w2s(p[1]), pa = w2s(p[0]), pb = w2s(p[2]);
+        const u1 = norm(sub(pa, pv)), u2 = norm(sub(pb, pv));
+        let d = norm({ x: u1.x + u2.x, y: u1.y + u2.y });
+        if (Math.hypot(d.x, d.y) < 1e-9) d = perp(u1);
+        chip(`∠${p[0].label}${p[1].label}${p[2].label} = ${fmt(mark, 2)}°`, pv.x + d.x * 54, pv.y + d.y * 54, '#92400e', 'rgba(255,249,237,.95)', 'center');
+      }
+    }
   } else if (s.type === 'segment') {
     const p = shapePoints(s);
     if (p.length >= 2) drawPolyline(p.map(w2s), color, 2.1);
@@ -2399,6 +2425,9 @@ function drawSelectedOutline(s, color, width = 5) {
     let d = norm({ x: u.x + v.x, y: u.y + v.y });
     if (Math.hypot(d.x, d.y) < 1e-9) d = perp(u);
     drawRayWorld(pts[0], { x: pts[0].x + d.x, y: pts[0].y + d.y }, color, width, [], 5.2);
+  } else if (s.type === 'angle') {
+    drawPolyline([pts[1], pts[0]].map(w2s), color, width);
+    drawPolyline([pts[1], pts[2]].map(w2s), color, width);
   }
 }
 
@@ -2527,6 +2556,18 @@ function drawPendingPreview() {
         let d = norm({ x: u.x + v.x, y: u.y + v.y });
         if (Math.hypot(d.x, d.y) < 1e-9) d = perp(u);
         drawRayWorld(o, { x: o.x + d.x, y: o.y + d.y }, 'rgba(180,83,9,.65)', 1.7, [5, 5], 5.2);
+      }
+    } else if (state.tool === 'angle') {
+      if (p.length === 1) {
+        const pa = w2s(a), pc = w2s(cur);
+        ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pc.x, pc.y); ctx.stroke();
+      } else if (p.length === 2) {
+        const A = p[0], O = p[1], B = cur;
+        drawPolyline([O, A].map(w2s), 'rgba(180,83,9,.55)', 1.5);
+        drawPolyline([O, B].map(w2s), 'rgba(180,83,9,.55)', 1.5);
+        if (Math.abs(cross(sub(A, O), sub(B, O))) > 1e-4) {
+          drawAngleArcsWorld(O, A, B, 1, 'rgba(180,83,9,.55)', 22);
+        }
       }
     } else if (state.tool === 'triangle') {
       if (p.length === 1) {
@@ -2720,22 +2761,32 @@ function nearestVertexIndex(shape, sp) {
   return best;
 }
 
-function setAlphaAtClick(sp) {
-  const hit = polygonAtClick(sp);
-  if (!hit) { toast('请点击三角形或四边形内部 / 顶点，取其内角为 α', 'warn'); return; }
-  const idx = hit.point ? hit.shape.points.indexOf(hit.point.id) : nearestVertexIndex(hit.shape, sp);
+function setAlphaForShape(shape, vertexIndex) {
+  if (!shape) return;
   const old = state.geom.alpha;
-  if (old && old.shapeId === hit.shape.id && old.vertexIndex === idx) {
+  if (old && old.shapeId === shape.id && old.vertexIndex === vertexIndex) {
     toast('这个角已经设为 α', 'warn');
     return;
   }
   pushHistory();
-  state.geom.alpha = { shapeId: hit.shape.id, vertexIndex: idx };
-  state.selected = { kind: 'shape', id: hit.shape.id };
+  state.geom.alpha = { shapeId: shape.id, vertexIndex };
+  state.selected = { kind: 'shape', id: shape.id };
   const info = getAlphaInfo();
   updateTransformUI();
   renderAllPanels(); draw(); saveSoon();
   toast(info ? `已取 ${info.label} = ${fmt(info.value, 2)}° 作为 α` : '已设置 α', 'ok');
+}
+
+function setAlphaAtClick(sp) {
+  const angleShape = hitTestShape(sp);
+  if (angleShape && angleShape.type === 'angle') {
+    setAlphaForShape(angleShape, 1);
+    return;
+  }
+  const hit = polygonAtClick(sp);
+  if (!hit) { toast('请点击三角形 / 四边形内部，或一个三点角', 'warn'); return; }
+  const idx = hit.point ? hit.shape.points.indexOf(hit.point.id) : nearestVertexIndex(hit.shape, sp);
+  setAlphaForShape(hit.shape, idx);
 }
 
 function axisLineForShape(s) {
@@ -2833,9 +2884,10 @@ function updateTransformUI() {
   if (input.value !== state.rotateExpr && document.activeElement !== input) input.value = state.rotateExpr;
   const info = getAlphaInfo();
   if (info) {
-    readout.innerHTML = `<b>α = ${fmt(info.value, 2)}°</b><span>${esc(info.label)} · ${esc(info.shape.type === 'triangle' ? '三角形内角' : '四边形内角')}</span>`;
+    const alphaKind = info.shape.type === 'triangle' ? '三角形内角' : info.shape.type === 'quad' ? '四边形内角' : '三点角';
+    readout.innerHTML = `<b>α = ${fmt(info.value, 2)}°</b><span>${esc(info.label)} · ${esc(alphaKind)}</span>`;
   } else {
-    readout.innerHTML = '<span>未设置 · 用「取角 α」点三角形或四边形的顶点</span>';
+    readout.innerHTML = '<span>未设置 · 用「取角 α」点三角形 / 四边形内角或三点角</span>';
   }
   try {
     const angle = evalAngleExpression(state.rotateExpr);
@@ -2967,6 +3019,9 @@ function hitTestShape(sp) {
     } else if (s.type === 'perp-bisector' && pts.length >= 2) {
       const m = mid(pts[0], pts[1]), n = perp(sub(pts[1], pts[0]));
       if (distToLine(sp, w2s({ x: m.x - n.x, y: m.y - n.y }), w2s({ x: m.x + n.x, y: m.y + n.y })) < 9) return s;
+    } else if (s.type === 'angle' && pts.length >= 3) {
+      const o = w2s(pts[1]);
+      if (distToSegment(sp, w2s(pts[0]), o) < 8 || distToSegment(sp, w2s(pts[2]), o) < 8) return s;
     } else if (s.type === 'angle-bisector' && pts.length >= 3) {
       const o = pts[0], u = norm(sub(pts[1], o)), v = norm(sub(pts[2], o));
       let d = norm({ x: u.x + v.x, y: u.y + v.y });
@@ -3003,7 +3058,7 @@ const TOOL_NAMES = {
   triangle: '一般三角形', 'right-triangle': '直角三角形', 'isosceles-triangle': '等腰三角形',
   'right-isosceles': '等腰直角三角形', equilateral: '等边三角形', square: '正方形',
   rectangle: '矩形', parallelogram: '平行四边形', rhombus: '菱形', circle: '圆',
-  'perp-bisector': '垂直平分线', 'angle-bisector': '角平分线', midpoint: '线段中点',
+  'perp-bisector': '垂直平分线', 'angle-bisector': '角平分线', angle: '三点定角', midpoint: '线段中点',
   rotate: '旋转变换', reflect: '轴对称', 'set-alpha': '取角 α',
   congruent: '全等标记', similar: '相似标记'
 };
@@ -3148,10 +3203,11 @@ function updateHint() {
     circle: ['先点击圆心，再点击圆周上一点。', '半径等于两次点击的距离；可拖动圆上的点改变半径。'],
     'perp-bisector': ['依次点击线段的两个端点，生成垂直平分线。', '平分线经过中点且与线段垂直，并标出直角与等分记号。'],
     'angle-bisector': ['依次点击顶点、第一条边上一点、第二条边上一点。', '角平分线会标出两侧相等的角弧。'],
+    angle: ['依次点击边上一点、顶点、边上一点，确定一个角。', '建立后会显示角度；选中后可以把该角设为 α，用于含参旋转。'],
     midpoint: ['点击一条线段直接作中点；也可以依次点击两个点。', '中点是派生点，会随线段端点移动，并用等分刻线标出。'],
     rotate: ['先点击要旋转的点 / 图形，再点击一个点作为旋转中心。', '旋转角支持 α 表达式。默认生成带撇号的旋转像，原图保留。'],
     reflect: ['先点击要变换的点 / 图形，再点击一条直线作为对称轴。', '支持直线、线段、射线、垂直平分线或角平分线作为对称轴。'],
-    'set-alpha': ['点击三角形或四边形的内角，把它设为 α。', 'α 会随该角顶点拖动实时更新，可用于 180°−2α、90°−α 等旋转角。'],
+    'set-alpha': ['点击三角形 / 四边形的内角，或点击三点角，把它设为 α。', 'α 会随该角顶点拖动实时更新，可用于 180°−2α、90°−α 等旋转角。'],
     congruent: ['依次点击两个三角形，检查并标记全等。', '系统自动寻找顶点对应关系；三组对应边相等时添加相同刻度与角弧。'],
     similar: ['依次点击两个三角形，检查并标记相似。', '系统自动寻找顶点对应关系；对应角相等时添加相同角弧并显示相似比。']
   };
@@ -3192,7 +3248,7 @@ function renderObjectList() {
     });
   } else {
     for (const s of state.geom.shapes) {
-      items.push({ kind: 'shape', id: s.id, color: shapeColor(s), visible: s.visible, name: shapeLabel(s), sub: s.imageOf ? '变换像' : '图形' });
+      items.push({ kind: 'shape', id: s.id, color: shapeColor(s), visible: s.visible, name: shapeLabel(s), sub: s.type === 'angle' ? '角' : s.imageOf ? '变换像' : '图形' });
     }
     for (const m of state.geom.marks) {
       const A = getShape(m.a), B = getShape(m.b);
@@ -3374,7 +3430,7 @@ function renderSelection() {
 }
 
 function shapeDetailHTML(s) {
-  const head = `<div class="sel-title">${esc(shapeLabel(s))} <span class="pill">${s.type === 'triangle' ? 'TRIANGLE' : s.type === 'quad' ? 'QUADRILATERAL' : s.type === 'circle' ? 'CIRCLE' : s.type === 'segment' ? 'SEGMENT' : s.type === 'ray' ? 'RAY' : s.type === 'line' ? 'LINE' : 'CONSTRUCTION'}</span>${s.imageOf ? '<span class="pill" style="color:#2563eb;background:#eaf1ff">变换像</span>' : ''}</div>`;
+  const head = `<div class="sel-title">${esc(shapeLabel(s))} <span class="pill">${s.type === 'triangle' ? 'TRIANGLE' : s.type === 'quad' ? 'QUADRILATERAL' : s.type === 'circle' ? 'CIRCLE' : s.type === 'angle' ? 'ANGLE' : s.type === 'segment' ? 'SEGMENT' : s.type === 'ray' ? 'RAY' : s.type === 'line' ? 'LINE' : 'CONSTRUCTION'}</span>${s.imageOf ? '<span class="pill" style="color:#2563eb;background:#eaf1ff">变换像</span>' : ''}</div>`;
   if (s.type === 'triangle') {
     const m = triangleMetrics(s);
     if (!m) return head;
@@ -3399,6 +3455,18 @@ function shapeDetailHTML(s) {
       <div class="measure-row"><span>面积</span><b>${fmt(m.area, 3)}</b></div>
       ${CONSTRAINED_QUAD_KINDS.includes(s.kind) ? '<div class="mark-note">拖动任一顶点时，以对角顶点为位似中心等比缩放，形状保持不变。</div>' : ''}
       ${quadAngleEditorHTML(s)}`;
+  }
+  if (s.type === 'angle') {
+    const p = shapePoints(s);
+    if (p.length < 3) return head;
+    const value = deg(angleAt(p[1], p[0], p[2]));
+    const isAlpha = state.geom.alpha && state.geom.alpha.shapeId === s.id;
+    return head + `<div class="sel-sub">顺序：边上一点 ${esc(p[0].label)} → 顶点 ${esc(p[1].label)} → 边上一点 ${esc(p[2].label)}</div>
+      <div class="math-line">∠${esc(p[0].label + p[1].label + p[2].label)} = ${fmt(value, 3)}°</div>
+      <div class="measure-row"><span>顶点</span><b>${esc(p[1].label)} (${fmt(p[1].x, 2)}, ${fmt(p[1].y, 2)})</b></div>
+      <div class="measure-row"><span>两边</span><b class="txt">${esc(p[1].label + p[0].label)} / ${esc(p[1].label + p[2].label)}</b></div>
+      <div style="margin-top:8px"><button class="btn" id="setAngleAlpha" ${isAlpha ? 'disabled' : ''} style="width:100%">${isAlpha ? '当前已设为 α' : '把这个角设为 α'}</button></div>
+      <div class="apex-hint">设成 α 后，旋转工具就可以直接使用 180°−2α、90°−α 等含参角度。</div>`;
   }
   if (s.type === 'circle') {
     const p = shapePoints(s);
@@ -3820,7 +3888,7 @@ function handleToolClick(sp) {
     return;
   }
 
-  const need = tool === 'triangle' || tool === 'angle-bisector' ? 3 : 2;
+  const need = tool === 'triangle' || tool === 'angle-bisector' || tool === 'angle' ? 3 : 2;
   state.pending.push({ x: ref.x, y: ref.y, pid: ref.pid });
   if (state.pending.length < need) {
     draw();
@@ -3867,6 +3935,14 @@ function completeShape(tool, refs) {
     const s = addShape('angle-bisector', [po, pa, pb]);
     state.selected = { kind: 'shape', id: s.id };
     toast(`已创建 ∠${pa.label}${po.label}${pb.label} 的角平分线`, 'ok');
+  } else if (tool === 'angle') {
+    const [A, O, B] = refs;
+    if (Math.abs(cross(sub(A, O), sub(B, O))) < 1e-4) { toast('三点共线，无法确定一个角', 'warn'); draw(); return; }
+    pushHistory();
+    const pa = resolveRef(A), po = resolveRef(O), pb = resolveRef(B);
+    const s = addShape('angle', [pa, po, pb], 'angle');
+    state.selected = { kind: 'shape', id: s.id };
+    toast(`已建立 ∠${pa.label}${po.label}${pb.label}`, 'ok');
   } else if (tool === 'triangle') {
     if (Math.abs(cross(sub(refs[1], refs[0]), sub(refs[2], refs[0]))) < 1e-4) { toast('三点共线，无法组成三角形', 'warn'); draw(); return; }
     pushHistory();
@@ -4121,7 +4197,7 @@ function onPointerMove(e) {
     const changed = (hover && !state.hover) || (!hover && state.hover) || (hover && state.hover && (hover.kind !== state.hover.kind || hover.id !== state.hover.id));
     state.hover = hover;
     canvas.style.cursor = hover ? 'pointer' : state.tool === 'select' ? 'grab' : 'crosshair';
-    if (['select', 'point', 'segment', 'ray', 'line', 'triangle', 'right-triangle', 'isosceles-triangle', 'right-isosceles', 'equilateral', 'square', 'rectangle', 'parallelogram', 'rhombus', 'circle', 'perp-bisector', 'angle-bisector'].includes(state.tool)) {
+    if (['select', 'point', 'segment', 'ray', 'line', 'triangle', 'right-triangle', 'isosceles-triangle', 'right-isosceles', 'equilateral', 'square', 'rectangle', 'parallelogram', 'rhombus', 'circle', 'perp-bisector', 'angle-bisector', 'angle', 'midpoint'].includes(state.tool)) {
       state.preview = snapWorld(sp, e.altKey);
       draw();
     } else if (changed) draw();
@@ -4981,7 +5057,12 @@ function bindUI() {
     if (e.target.closest('#applyApex')) { applyApexFromUI(); return; }
     const qpreset = e.target.closest('[data-quad-angle]');
     if (qpreset) { applyQuadFromUI(parseFloat(qpreset.dataset.quadAngle)); return; }
-    if (e.target.closest('#applyQuadAngle')) applyQuadFromUI();
+    if (e.target.closest('#applyQuadAngle')) { applyQuadFromUI(); return; }
+    if (e.target.closest('#setAngleAlpha')) {
+      const sel = state.selected;
+      const s = sel && sel.kind === 'shape' ? getShape(sel.id) : null;
+      if (s && s.type === 'angle') setAlphaForShape(s, 1);
+    }
   });
   $('#selectionBox').addEventListener('keydown', e => {
     if (!e.target) return;
