@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<meta name="description" content="可交互的函数与几何实验室：平面 / 空间 / 空白画布，函数图像、求导、积分，圆、椭圆、抛物线与双曲线，三角形、四边形、圆与尺规作图，中点、旋转、轴对称，以及全等与相似标记。">
+<meta name="description" content="可交互的函数与几何实验室：平面 / 空间 / 空白画布，函数图像、求导、积分，圆、椭圆、抛物线与双曲线，三角形、四边形、圆与尺规作图，中点、旋转、轴对称、全等与相似标记，以及图片文字识别自动建图。">
 <title>函数与几何实验室 · 交互实验室</title>
 <style>
   :root{
@@ -286,6 +286,57 @@
   footer a{color:var(--violet);text-decoration:none;font-weight:700}
   footer a:hover{text-decoration:underline}
 
+  body.modal-open{overflow:hidden}
+  .modal{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:18px}
+  .modal[hidden]{display:none!important}
+  .modal-backdrop{position:absolute;inset:0;background:rgba(28,24,18,.48);backdrop-filter:blur(5px)}
+  .modal-card{position:relative;width:min(920px,97vw);max-height:92vh;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 40px 100px -40px rgba(25,20,10,.7);display:flex;flex-direction:column;overflow:hidden;animation:modalIn .18s ease}
+  @keyframes modalIn{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}}
+  .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 19px 12px;border-bottom:1px solid var(--line)}
+  .modal-head h2{margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em}
+  .modal-head p{margin:2px 0 0;font-size:10.5px;color:#8b8272}
+  .modal-close{border:0;background:#f6f2e9;color:#8b8272;width:28px;height:28px;border-radius:8px;font-size:17px;line-height:1;cursor:pointer;flex:none}
+  .modal-close:hover{background:#fff0f1;color:var(--rose)}
+  .modal-body{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:15px 18px;overflow:auto;min-height:0}
+  .ocr-column{min-width:0}
+  .ocr-drop{position:relative;border:2px dashed #d8cdb9;border-radius:14px;background:#fffcf6;min-height:245px;display:grid;place-items:center;overflow:hidden;cursor:pointer;transition:.16s;text-align:center;padding:14px}
+  .ocr-drop:hover,.ocr-drop.drag{border-color:var(--violet);background:#fbf8ff;box-shadow:0 0 0 4px var(--violet-soft)}
+  .ocr-drop img{max-width:100%;max-height:320px;display:block;border-radius:9px;object-fit:contain}
+  .ocr-drop img[hidden]{display:none}
+  .ocr-drop-prompt{display:flex;flex-direction:column;align-items:center;gap:7px;color:#9a8f7a;font-size:10.5px;line-height:1.6;pointer-events:none}
+  .ocr-drop-prompt b{font-size:12px;color:#5b5344}
+  .ocr-drop-prompt .big{width:42px;height:42px;border-radius:13px;background:var(--violet-soft);color:var(--violet);display:grid;place-items:center;font-size:20px}
+  .ocr-file-name{font-size:9.5px;color:#a89d88;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ocr-controls{display:flex;align-items:flex-end;gap:7px;margin-top:9px;flex-wrap:wrap}
+  .ocr-controls label{font-size:9.5px;font-weight:800;color:#8b8272;display:flex;flex-direction:column;gap:3px}
+  .ocr-controls select{border:1px solid #ddd3c0;border-radius:7px;background:#fff;padding:6px 8px;font-size:11px;color:var(--ink);outline:0}
+  .ocr-controls .btn{flex:none}
+  .ocr-status{margin-top:9px;padding:8px 9px;border-radius:8px;background:#f7f3ea;border:1px solid #eee5d5;font-size:9.5px;color:#8b8272;line-height:1.55;min-height:34px}
+  .ocr-status.ok{background:#f0fbf7;border-color:#cdece2;color:#166534}
+  .ocr-status.bad{background:#fff7f7;border-color:#fecaca;color:#991b1b}
+  .ocr-progress{height:4px;background:#eee8db;border-radius:99px;overflow:hidden;margin-top:5px;display:none}
+  .ocr-progress.on{display:block}
+  .ocr-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--violet),var(--teal));transition:width .2s}
+  .ocr-textarea{width:100%;height:292px;resize:vertical;border:1.5px solid #ddd3c0;border-radius:11px;background:#fff;color:var(--ink);padding:10px 11px;font-family:"Cambria Math","STIX Two Math",Georgia,"Microsoft YaHei",serif;font-size:12px;line-height:1.8;outline:0}
+  .ocr-textarea:focus{border-color:var(--violet);box-shadow:0 0 0 3px var(--violet-soft)}
+  .ocr-textarea::placeholder{color:#b8ad98;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+  .ocr-right-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+  .ocr-right-head b{font-size:10px;font-weight:800;letter-spacing:.08em;color:#8b8272}
+  .ocr-right-head button{border:0;background:transparent;color:var(--violet);font-size:9.5px;font-weight:800;cursor:pointer;padding:2px 4px}
+  .ocr-right-head button:hover{text-decoration:underline}
+  .ocr-tips{font-size:9px;color:#a89d88;line-height:1.7;margin-top:7px}
+  .ocr-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--line);background:#fbf8f2}
+  .ocr-foot .primary{width:auto;margin-top:0;padding:9px 15px}
+  .ocr-foot .check{font-size:10px}
+  @media (max-width:760px){
+    .modal{padding:8px}
+    .modal-card{max-height:96vh;border-radius:16px}
+    .modal-body{grid-template-columns:1fr;padding:12px}
+    .ocr-drop{min-height:180px}
+    .ocr-drop img{max-height:190px}
+    .ocr-textarea{height:190px}
+    .ocr-foot{padding:10px 12px}
+  }
   .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,18px);background:#1f2937;color:#fff;font-size:12px;font-weight:600;padding:10px 16px;border-radius:10px;box-shadow:0 18px 40px -20px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:.22s;z-index:60;max-width:min(90vw,460px);text-align:center;line-height:1.55}
   .toast.show{opacity:1;transform:translate(-50%,0)}
   .toast.ok{background:#115e59}
@@ -357,12 +408,13 @@
     <div>
       <div class="kicker">FUNCTION &amp; GEOMETRY STUDIO</div>
       <h1>画函数，<em>也画几何</em></h1>
-      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形作中点、旋转、轴对称，并可编辑等腰三角形的顶角。</p>
+      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形作中点、旋转、轴对称，并可编辑等腰三角形的顶角。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
     </div>
     <div class="hero-side">
       <div><i></i>三种画布：平面 / 空间 / 空白</div>
       <div><i></i>函数图像 · 求导 · 定积分</div>
       <div><i></i>中点 · 旋转 · 轴对称 · 全等相似</div>
+      <div><i></i>图片识别 · 自动建图</div>
     </div>
   </section>
 
@@ -636,6 +688,9 @@
         <button class="tool-btn" id="exportBtn" title="导出 PNG">
           <svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg><span>导出</span>
         </button>
+        <button class="tool-btn" id="ocrBtn" title="上传图片，识别文字并生成函数 / 几何">
+          <svg viewBox="0 0 24 24"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3"/><rect x="7" y="8" width="10" height="8" rx="1"/><path d="M9 16l2-3 2 2 2-3"/></svg><span>识图</span>
+        </button>
         <div class="tb-grow"></div>
         <div class="zoom-pill">
           <button id="zoomOut" title="缩小">−</button><span id="zoomLabel">100%</span><button id="zoomIn" title="放大">＋</button>
@@ -682,6 +737,55 @@
   </footer>
 </div>
 
+<div class="modal" id="ocrModal" hidden>
+  <div class="modal-backdrop" data-close-ocr></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ocrTitle">
+    <div class="modal-head">
+      <div>
+        <h2 id="ocrTitle">图片转函数 / 几何</h2>
+        <p>上传题目或图形截图，提取文字后自动建立函数图像与几何图形。图片只在本机识别。</p>
+      </div>
+      <button class="modal-close" id="ocrClose" data-close-ocr title="关闭">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="ocr-column">
+        <div class="ocr-drop" id="ocrDrop">
+          <input type="file" id="ocrFile" accept="image/png,image/jpeg,image/webp,image/bmp" hidden>
+          <div class="ocr-drop-prompt" id="ocrDropPrompt">
+            <span class="big">＋</span>
+            <b>点击或拖入图片</b>
+            <span>PNG / JPG / WEBP · 建议清晰的截图<br>识别后可修改文字再生成</span>
+          </div>
+          <img id="ocrPreview" alt="待识别图片" hidden>
+        </div>
+        <div class="ocr-file-name" id="ocrFileName">未选择图片</div>
+        <div class="ocr-controls">
+          <label>识别语言
+            <select id="ocrLang">
+              <option value="chi_sim+eng">中文 + 英文（几何题）</option>
+              <option value="eng">英文 / 数学公式</option>
+            </select>
+          </label>
+          <button class="btn" id="ocrRun">开始识别</button>
+        </div>
+        <div class="ocr-status" id="ocrStatus">首次识别需要在线加载 OCR 引擎和中文语言包，可能需要 10–60 秒。图片不会上传到服务器。</div>
+        <div class="ocr-progress" id="ocrProgress"><i></i></div>
+      </div>
+      <div class="ocr-column">
+        <div class="ocr-right-head">
+          <b>识别文字（可编辑）</b>
+          <button id="ocrExample">填入示例</button>
+        </div>
+        <textarea class="ocr-textarea" id="ocrText" spellcheck="false" placeholder="识别结果会显示在这里，也可以直接粘贴题目文字，例如：&#10;y = x^2 - 2x + 1&#10;等腰三角形 ABC&#10;A(-4, 0) B(4, 0) C(0, 6)&#10;圆 O 半径 2"></textarea>
+        <div class="ocr-tips">支持：<b>y = … / f(x) = …</b> 函数；<b>三角形、正方形、矩形、平行四边形、菱形、圆、线段、直线、射线</b>；坐标写成 <b>A(-4, 0)</b>。没有坐标时会自动排布。</div>
+      </div>
+    </div>
+    <div class="ocr-foot">
+      <label class="check"><input type="checkbox" id="ocrReplace">生成前清空现有函数与几何</label>
+      <button class="btn primary" id="ocrGenerate">从文字生成</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <div class="js-error" id="jsError"></div>
 <script src="functions-geometry.js"></script>

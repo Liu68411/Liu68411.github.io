@@ -1501,6 +1501,7 @@ function updateLegend() {
     if (state.curve && state.curve.visible !== false) html = `<div><i style="background:#7c3aed"></i>${esc(state.curve.kind === 'circle' ? '圆' : state.curve.kind === 'ellipse' ? '椭圆' : state.curve.kind === 'parabola' ? '抛物线' : '双曲线')}</div><div>${esc(state.curve.equation)}</div>`;
   } else if (state.tab === 'geometry') {
     html = '<div><i style="background:#0f766e"></i>顶点 / 图形</div><div><i class="dash" style="color:#b45309"></i>平分线 / 中点</div>';
+    html += '<div style="color:#8b8272">刻线 = 等边 · 角弧 = 等角 · 箭头 = 平行</div>';
     if (state.geom.marks.length) html += '<div style="color:#15803d">≅ 全等 &nbsp; <span style="color:#b45309">∽ 相似</span></div>';
     const a = getAlphaInfo();
     if (a) html += `<div style="color:#92400e">α = ${fmt(a.value, 2)}°（${esc(a.label)}）</div>`;
@@ -2102,28 +2103,45 @@ function drawShapeBase(s) {
   }
 }
 
+function equalGroups(values, close) {
+  const groups = [], used = new Array(values.length).fill(false);
+  for (let i = 0; i < values.length; i++) {
+    if (used[i]) continue;
+    const group = [i];
+    for (let j = i + 1; j < values.length; j++) {
+      if (!used[j] && close(values[i], values[j])) { group.push(j); used[j] = true; }
+    }
+    if (group.length > 1) { used[i] = true; groups.push(group); }
+  }
+  return groups;
+}
+
+function drawEqualSideMarks(pts, sides, color, size = 5.5) {
+  const groups = equalGroups(sides, (a, b) => Math.abs(a - b) < 0.018 * Math.max(1e-9, Math.max(a, b)));
+  groups.forEach((grp, gi) => {
+    for (const idx of grp) drawTicksWorld(pts[idx], pts[(idx + 1) % pts.length], gi + 1, color, size, .85);
+  });
+}
+
+function drawEqualAngleMarks(pts, angles, color, radius = 17) {
+  const n = pts.length;
+  const groups = equalGroups(angles, (a, b) => Math.abs(a - b) < 1.2);
+  groups.forEach((grp, gi) => {
+    // 所有角都是直角时用直角符号即可，避免与方框记号重叠
+    if (grp.every(i => Math.abs(angles[i] - 90) < 1.2)) return;
+    for (const idx of grp) {
+      drawAngleArcsWorld(pts[idx], pts[(idx + 1) % n], pts[(idx + n - 1) % n], gi + 1, color, radius);
+    }
+  });
+}
+
 function drawShapeMarks(s) {
   const color = shapeColor(s);
   if (s.type === 'triangle') {
     const m = triangleMetrics(s);
     if (!m) return;
-    // 等边 / 等腰刻度
-    const groups = [];
-    const used = new Array(3).fill(false);
-    for (let i = 0; i < 3; i++) {
-      if (used[i]) continue;
-      const group = [i];
-      for (let j = i + 1; j < 3; j++) {
-        if (Math.abs(m.sides[i] - m.sides[j]) < 0.018 * Math.max(1e-9, Math.max(m.sides[i], m.sides[j]))) { group.push(j); used[j] = true; }
-      }
-      if (group.length > 1) { used[i] = true; groups.push(group); }
-    }
-    groups.forEach((grp, gi) => {
-      for (const idx of grp) {
-        const a = m.pts[idx], b = m.pts[(idx + 1) % 3];
-        drawTicksWorld(a, b, gi + 1, color, 5.5, .85);
-      }
-    });
+    drawEqualSideMarks(m.pts, m.sides, color);
+    drawEqualAngleMarks(m.pts, m.angles, color, 16);
     // 直角
     for (let i = 0; i < 3; i++) {
       if (Math.abs(m.angles[i] - 90) < 1.2) {
@@ -2139,13 +2157,11 @@ function drawShapeMarks(s) {
     if (Math.abs(cross(norm(sub(m.pts[2], m.pts[1])), norm(sub(m.pts[3], m.pts[0])))) < 0.04) c2 = 1;
     if (c1) { drawParallelMark(m.pts[0], m.pts[1], 1, color); drawParallelMark(m.pts[2], m.pts[3], 1, color); }
     if (c2) { drawParallelMark(m.pts[1], m.pts[2], 2, color); drawParallelMark(m.pts[3], m.pts[0], 2, color); }
+    drawEqualSideMarks(m.pts, m.sides, color, 5);
+    drawEqualAngleMarks(m.pts, m.angles, color, 16);
     // 直角
     for (let i = 0; i < 4; i++) {
       if (Math.abs(m.angles[i] - 90) < 1.2) drawRightAngleWorld(m.pts[i], m.pts[(i + 1) % 4], m.pts[(i + 3) % 4], color, 9);
-    }
-    // 等边刻度
-    if (m.allEq) {
-      for (let i = 0; i < 4; i++) drawTicksWorld(m.pts[i], m.pts[(i + 1) % 4], 1, color, 4.5, .7);
     }
   }
 }
@@ -3241,6 +3257,7 @@ function shapeDetailHTML(s) {
       <div class="measure-row"><span>周长</span><b>${fmt(m.perimeter, 3)}</b></div>
       <div class="measure-row"><span>面积</span><b>${fmt(m.area, 3)}</b></div>
       <div class="measure-row"><span>判定</span><b class="txt">${m.eq ? '三边相等' : m.iso ? '两边相等' : '三边不等'}${m.right ? ' · 含直角' : ''}</b></div>
+      ${CONSTRAINED_TRIANGLE_KINDS.includes(s.kind) ? '<div class="mark-note">拖动任一顶点时，以对边中点为基准等比缩放，形状和角度保持不变。</div>' : ''}
       ${apexEditorHTML(s)}`;
   }
   if (s.type === 'quad') {
@@ -3866,6 +3883,19 @@ function toggleVisibility(kind, id) {
 
 /* ---------- 指针事件 ---------- */
 
+const CONSTRAINED_TRIANGLE_KINDS = ['isosceles-triangle', 'right-isosceles', 'equilateral'];
+
+function constrainedTriangleForPoint(pointId) {
+  const sel = state.selected;
+  if (sel && sel.kind === 'shape') {
+    const s = getShape(sel.id);
+    if (s && s.type === 'triangle' && CONSTRAINED_TRIANGLE_KINDS.includes(s.kind) && s.points.includes(pointId)) return s;
+  }
+  const candidates = state.geom.shapes.filter(s => s.visible && s.type === 'triangle'
+    && CONSTRAINED_TRIANGLE_KINDS.includes(s.kind) && s.points.includes(pointId));
+  return candidates.length ? candidates[candidates.length - 1] : null;
+}
+
 function onPointerDown(e) {
   if (e.button !== 0) return;
   const sp = eventPos(e);
@@ -3877,13 +3907,24 @@ function onPointerDown(e) {
   if (state.tool === 'select') {
     const p = hitTestPoint(sp, 12);
     if (p) {
+      const ct = p.derived ? null : constrainedTriangleForPoint(p.id);
       state.selected = { kind: 'point', id: p.id };
-      state.drag = p.derived
-        ? { type: 'derived', id: p.id, sx: sp.x, sy: sp.y, moved: false }
-        : {
-          type: 'point', id: p.id, sx: sp.x, sy: sp.y,
-          ox: p.x, oy: p.y, moved: false, pushed: false
+      if (ct) {
+        const pts = shapePoints(ct);
+        const others = pts.filter(q => q.id !== p.id);
+        const anchor = mid(others[0], others[1]);
+        state.drag = {
+          type: 'constrained', shapeId: ct.id, pointId: p.id, sx: sp.x, sy: sp.y,
+          anchor, orig: pts.map(q => ({ id: q.id, x: q.x, y: q.y })), moved: false, pushed: false
         };
+      } else {
+        state.drag = p.derived
+          ? { type: 'derived', id: p.id, sx: sp.x, sy: sp.y, moved: false }
+          : {
+            type: 'point', id: p.id, sx: sp.x, sy: sp.y,
+            ox: p.x, oy: p.y, moved: false, pushed: false
+          };
+      }
       renderAllPanels(); draw();
       return;
     }
@@ -3941,6 +3982,37 @@ function onPointerMove(e) {
     draw();
     return;
   }
+  if (d.type === 'constrained') {
+    if (!d.moved && Math.hypot(sp.x - d.sx, sp.y - d.sy) > 2) {
+      d.moved = true;
+      if (!d.pushed) { pushHistory(); d.pushed = true; }
+    }
+    if (!d.moved) return;
+    const shape = getShape(d.shapeId);
+    const dragged = getPt(d.pointId);
+    if (!shape || !dragged) return;
+    let target = snapWorld(sp, e.altKey);
+    if (target.pid === d.pointId) {
+      const w = s2w(sp); target = { x: w.x, y: w.y, pid: null };
+    }
+    const oldPoint = d.orig.find(q => q.id === d.pointId);
+    if (!oldPoint) return;
+    const oldLen = Math.hypot(oldPoint.x - d.anchor.x, oldPoint.y - d.anchor.y);
+    const newLen = Math.hypot(target.x - d.anchor.x, target.y - d.anchor.y);
+    if (oldLen < 1e-6 || !Number.isFinite(newLen)) return;
+    // 以对边中点为基准做位似缩放：保持所有角与边的比例，只改变大小
+    const k = clamp(newLen / oldLen, 0.12, 20);
+    for (const q of d.orig) {
+      const p = getPt(q.id);
+      if (!p) continue;
+      p.x = d.anchor.x + (q.x - d.anchor.x) * k;
+      p.y = d.anchor.y + (q.y - d.anchor.y) * k;
+    }
+    state.selected = { kind: 'shape', id: d.shapeId };
+    state.preview = null;
+    renderSelection(); draw(); saveSoon();
+    return;
+  }
   if (d.type === 'point') {
     const p = getPt(d.id);
     if (!p) return;
@@ -3996,8 +4068,8 @@ function onPointerUp(e) {
   if (d.type === 'click' && !d.moved) {
     handleToolClick(sp);
   }
-  if (d.type === 'orbit' || d.type === 'pan' || d.type === 'point' || d.type === 'shape') saveSoon();
-  if (d.type === 'point' || d.type === 'shape') updateTransformUI();
+  if (d.type === 'orbit' || d.type === 'pan' || d.type === 'point' || d.type === 'shape' || d.type === 'constrained') saveSoon();
+  if (d.type === 'point' || d.type === 'shape' || d.type === 'constrained') updateTransformUI();
   updateToolbarVisibility();
   draw();
 }
@@ -4106,6 +4178,398 @@ function fallbackCopy(text) {
 /* ============================================================
    持久化
    ============================================================ */
+
+/* ============================================================
+   图片识别：OCR + 文本解析
+   ============================================================ */
+
+const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+let ocrFile = null;
+let ocrPreviewUrl = null;
+let ocrEnginePromise = null;
+
+function openOcr() {
+  const modal = $('#ocrModal');
+  if (!modal) return;
+  modal.hidden = false;
+  document.body.classList.add('modal-open');
+  setTimeout(() => {
+    const t = $('#ocrText');
+    if (t && !t.value.trim()) t.focus();
+  }, 50);
+}
+function closeOcr() {
+  const modal = $('#ocrModal');
+  if (!modal) return;
+  modal.hidden = true;
+  document.body.classList.remove('modal-open');
+}
+function setOcrStatus(text, kind = '') {
+  const el = $('#ocrStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('ok', 'bad');
+  if (kind) el.classList.add(kind);
+}
+function setOcrProgress(v) {
+  const bar = $('#ocrProgress');
+  if (!bar) return;
+  const on = v !== null && v !== undefined;
+  bar.classList.toggle('on', on);
+  const i = bar.querySelector('i');
+  if (i) i.style.width = on ? `${clamp(v, 0, 1) * 100}%` : '0';
+}
+function setOcrFile(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) { toast('请选择图片文件', 'warn'); return; }
+  if (file.size > 12 * 1024 * 1024) { toast('图片建议小于 12 MB', 'warn'); return; }
+  ocrFile = file;
+  if (ocrPreviewUrl) URL.revokeObjectURL(ocrPreviewUrl);
+  ocrPreviewUrl = URL.createObjectURL(file);
+  const img = $('#ocrPreview'), prompt = $('#ocrDropPrompt'), name = $('#ocrFileName');
+  if (img) { img.src = ocrPreviewUrl; img.hidden = false; }
+  if (prompt) prompt.hidden = true;
+  if (name) name.textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+  const ta = $('#ocrText');
+  if (ta) ta.value = '';
+  setOcrStatus('图片已载入。点击「开始识别」，或直接在右侧编辑文字。');
+  setOcrProgress(null);
+}
+
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (ocrEnginePromise) return ocrEnginePromise;
+  ocrEnginePromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = TESSERACT_CDN;
+    s.async = true;
+    s.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error('OCR 引擎未初始化'));
+    s.onerror = () => { ocrEnginePromise = null; reject(new Error('无法加载 OCR 引擎')); };
+    document.head.appendChild(s);
+  });
+  return ocrEnginePromise;
+}
+
+async function runOcr() {
+  if (!ocrFile) { toast('请先选择一张图片', 'warn'); setOcrStatus('请先选择图片。'); return; }
+  const btn = $('#ocrRun');
+  if (btn) { btn.disabled = true; btn.textContent = '识别中…'; }
+  setOcrStatus('正在加载 OCR 引擎（首次约 10–60 秒）…');
+  setOcrProgress(0.02);
+  let worker = null;
+  try {
+    const Tesseract = await loadTesseract();
+    const lang = $('#ocrLang') ? $('#ocrLang').value : 'chi_sim+eng';
+    setOcrStatus('正在初始化识别语言…');
+    worker = await Tesseract.createWorker(lang, 1, {
+      logger: m => {
+        if (!m) return;
+        if (m.status === 'recognizing text') {
+          setOcrProgress(m.progress || 0);
+          setOcrStatus(`正在识别文字… ${Math.round((m.progress || 0) * 100)}%`);
+        } else if (m.status) {
+          setOcrStatus(`识别引擎：${m.status}…`);
+        }
+      }
+    });
+    setOcrStatus('正在识别图片文字…');
+    const { data } = await worker.recognize(ocrFile);
+    const text = normalizeOcrText((data && data.text ? data.text : '').trim());
+    const ta = $('#ocrText');
+    if (ta) ta.value = text;
+    if (text) {
+      setOcrStatus('识别完成。请在右侧核对文字，再点击「从文字生成」。', 'ok');
+      setOcrProgress(1);
+    } else {
+      setOcrStatus('没有识别到文字。可以换一张更清晰的图片，或直接手动输入。', 'bad');
+      setOcrProgress(null);
+    }
+  } catch (err) {
+    setOcrStatus('OCR 失败：' + (err && err.message ? err.message : '引擎不可用') + '。可直接把题目文字粘贴到右侧生成。', 'bad');
+    setOcrProgress(null);
+  } finally {
+    if (worker) { try { await worker.terminate(); } catch { /* ignore */ } }
+    if (btn) { btn.disabled = false; btn.textContent = '开始识别'; }
+  }
+}
+
+function normalizeOcrText(text) {
+  return String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[\uFF21-\uFF3A\uFF41-\uFF5A]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[−–—﹣]/g, '-')
+    .replace(/[×·・]/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/([a-zA-Z0-9)])\s*["“”'′]\s*(\d+)/g, '$1^$2')
+    .replace(/[²]/g, '^2').replace(/[³]/g, '^3').replace(/[⁴]/g, '^4')
+    .replace(/[⁵]/g, '^5').replace(/[⁶]/g, '^6')
+    .replace(/π/g, 'pi')
+    .replace(/[，]/g, ',')
+    .replace(/[：]/g, ':')
+    .replace(/[；]/g, ';')
+    .replace(/\u3000/g, ' ');
+}
+
+function normalizeMathExpr(raw) {
+  let s = String(raw || '')
+    .replace(/[。；;]+$/g, '')
+    .replace(/[，,]\s*[^0-9a-zA-Z+\-*/^().]+$/g, '')
+    .replace(/√\s*\(([^)]+)\)/g, 'sqrt($1)')
+    .replace(/√\s*([a-zA-Z0-9.]+)/g, 'sqrt($1)')
+    .replace(/\b(sin|cos|tan|ln|log|sqrt|abs|exp)\s*([a-zA-Z0-9.]+)/gi, '$1($2)')
+    .replace(/[^0-9a-zA-Z+\-*/^().,\s]/g, '')
+    .replace(/\s+/g, '');
+  return s;
+}
+
+function ocrExtractFunctions(text) {
+  const found = [];
+  const chunks = String(text || '').split(/\n|;/);
+  for (let raw of chunks) {
+    let line = raw.trim()
+      .replace(/^[\s（(]*[0-9①-⑳]+[.、)）]?\s*/, '')
+      .replace(/^函数\s*[:：]?\s*/, '');
+    if (!line) continue;
+    const m = line.match(/^(?:y|f\s*\(\s*x\s*\))\s*[:=]\s*(.+)$/i);
+    if (!m) continue;
+    let expr = normalizeMathExpr(m[1]);
+    if (!expr) continue;
+    try {
+      parseExpression(expr);
+      if (!found.some(f => f.replace(/\s+/g, '') === expr)) found.push(expr);
+    } catch { /* 忽略无法解析的行 */ }
+  }
+  return found;
+}
+
+const OCR_SHAPE_DEFS = [
+  { word: '等腰直角三角形', type: 'triangle', kind: 'right-isosceles', n: 3 },
+  { word: '等边三角形', type: 'triangle', kind: 'equilateral', n: 3 },
+  { word: '等腰三角形', type: 'triangle', kind: 'isosceles-triangle', n: 3 },
+  { word: '直角三角形', type: 'triangle', kind: 'right-triangle', n: 3 },
+  { word: '三角形', type: 'triangle', kind: 'triangle', n: 3 },
+  { word: '正方形', type: 'quad', kind: 'square', n: 4 },
+  { word: '平行四边形', type: 'quad', kind: 'parallelogram', n: 4 },
+  { word: '长方形', type: 'quad', kind: 'rectangle', n: 4 },
+  { word: '矩形', type: 'quad', kind: 'rectangle', n: 4 },
+  { word: '菱形', type: 'quad', kind: 'rhombus', n: 4 }
+];
+
+function ocrExtractGeometry(text) {
+  const points = new Map();
+  const shapes = [];
+  const seen = new Set();
+  const pointRe = /([A-Za-z])\s*[（(]\s*(-?\d+(?:\.\d+)?)\s*[,，]\s*(-?\d+(?:\.\d+)?)\s*[)）]/g;
+  let pm;
+  while ((pm = pointRe.exec(text))) {
+    points.set(pm[1].toUpperCase(), { x: parseFloat(pm[2]), y: parseFloat(pm[3]) });
+  }
+
+  const lines = String(text || '').split(/\n/);
+  for (const raw of lines) {
+    const line = raw.replace(/\s+/g, '');
+    if (!line) continue;
+
+    for (const def of OCR_SHAPE_DEFS) {
+      const re = new RegExp(def.word + '\\s*[:：]?\\s*([A-Z]{' + def.n + '})');
+      const m = line.match(re);
+      if (m) {
+        const labels = m[1].split('');
+        const key = def.kind + ':' + labels.join('');
+        if (!seen.has(key)) {
+          seen.add(key);
+          shapes.push({ type: def.type, kind: def.kind, labels });
+        }
+        break;
+      }
+    }
+
+    const seg = line.match(/(线段|射线|直线)\s*([A-Z]{2})/);
+    if (seg) {
+      const type = seg[1] === '线段' ? 'segment' : seg[1] === '射线' ? 'ray' : 'line';
+      const labels = seg[2].split('');
+      const key = type + ':' + labels.join('');
+      if (!seen.has(key)) { seen.add(key); shapes.push({ type, kind: '', labels }); }
+    }
+
+    const perp = line.match(/垂直平分线\s*([A-Z]{2})/);
+    if (perp) {
+      const labels = perp[1].split('');
+      const key = 'perp:' + labels.join('');
+      if (!seen.has(key)) { seen.add(key); shapes.push({ type: 'perp-bisector', kind: '', labels }); }
+    }
+
+    const circle = line.match(/圆(?:心)?\s*([A-Z])/);
+    if (circle) {
+      const radius = line.match(/半径\s*(?:为|=|:)?\s*(\d+(?:\.\d+)?)/);
+      const key = 'circle:' + circle[1];
+      if (!seen.has(key)) {
+        seen.add(key);
+        shapes.push({ type: 'circle', kind: '', center: circle[1], r: radius ? parseFloat(radius[1]) : 2 });
+      }
+    }
+  }
+  return { points, shapes };
+}
+
+function ocrAutoLabel() {
+  const used = usedPointLabels();
+  for (const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') if (!used.has(c)) return c;
+  return nextLabel();
+}
+
+function ocrApplyData(text, replace) {
+  const normalized = normalizeOcrText(text);
+  const functions = ocrExtractFunctions(normalized);
+  const geo = ocrExtractGeometry(normalized);
+  if (!functions.length && !geo.shapes.length && !geo.points.size) {
+    setOcrStatus('没有识别到可生成的函数或几何图形。可以按示例格式修改文字后重试。', 'bad');
+    toast('没有识别到可生成的内容', 'warn');
+    return false;
+  }
+
+  if (replace) {
+    state.functions = [];
+    state.activeFnId = null;
+    state.calc = null;
+    clearGeometry(true);
+  }
+
+  // 函数
+  let addedFns = 0;
+  for (const expr of functions) {
+    if (state.functions.some(f => f.expr.replace(/\s+/g, '') === expr)) continue;
+    let ast;
+    try { ast = parseExpression(expr); } catch { continue; }
+    if (state.functions.length >= 6) {
+      const removed = state.functions.shift();
+      if (state.activeFnId === removed.id) state.activeFnId = null;
+    }
+    const fn = { id: uid('f'), expr, ast, color: fnColor(state.functions.length), visible: true };
+    state.functions.push(fn);
+    state.activeFnId = fn.id;
+    addedFns++;
+  }
+  state.calc = null;
+  resetCalcHints();
+  if (addedFns) {
+    const input = $('#exprInput');
+    const active = activeFn();
+    if (input && active) input.value = active.expr;
+  }
+
+  // 坐标点
+  const pointsBefore = state.geom.points.length;
+  for (const [label, co] of geo.points) {
+    if (state.geom.points.some(p => p.label === label)) continue;
+    makePoint(co.x, co.y, label);
+  }
+  const addedPoints = state.geom.points.length - pointsBefore;
+
+  const find = label => state.geom.points.find(p => p.label === label) || null;
+  let slot = 0;
+  const nextSlot = () => {
+    const x = -10 + (slot % 3) * 9;
+    const y = 8 - Math.floor(slot / 3) * 7;
+    slot++;
+    return { x, y };
+  };
+  const ensure = (label, x, y) => find(label) || makePoint(x, y, label);
+
+  let addedShapes = 0;
+  for (const def of geo.shapes) {
+    if (def.type === 'circle') {
+      const center = find(def.center) || ensure(def.center, nextSlot().x, 0);
+      const r = Math.max(0.2, def.r || 2);
+      let through = state.geom.points.find(p => Math.abs(dist(center, p) - r) < 1e-9 && p.id !== center.id);
+      if (!through) {
+        const label = ocrAutoLabel();
+        through = makePoint(center.x + r, center.y, label);
+      }
+      addShape('circle', [center, through]);
+      addedShapes++;
+      continue;
+    }
+
+    const labels = def.labels;
+    if (def.type === 'triangle') {
+      let pts = labels.map(find);
+      if (!pts.every(Boolean)) {
+        const loc = nextSlot();
+        let A = pts[0] || makePoint(loc.x, loc.y, labels[0]);
+        let B = pts[1] || makePoint(loc.x + 4, loc.y, labels[1]);
+        let pos;
+        if (def.kind !== 'triangle') pos = autoTrianglePoints(A, B, def.kind);
+        if (!pos) pos = [A, B, { x: A.x + 2.5, y: A.y + 3.5 }];
+        let C = pts[2] || makePoint(pos[2].x, pos[2].y, labels[2]);
+        pts = [A, B, C];
+      }
+      if (new Set(pts.map(p => p.id)).size === 3) { addShape('triangle', pts, def.kind); addedShapes++; }
+      continue;
+    }
+
+    if (def.type === 'quad') {
+      let pts = labels.map(find);
+      if (!pts.every(Boolean)) {
+        const loc = nextSlot();
+        let A = pts[0] || makePoint(loc.x, loc.y, labels[0]);
+        let B = pts[1] || makePoint(loc.x + 4, loc.y, labels[1]);
+        const pos = autoQuadPoints(A, B, def.kind) || [
+          A, B, { x: B.x, y: B.y + 3 }, { x: A.x, y: A.y + 3 }
+        ];
+        pts = [A, B, pts[2] || makePoint(pos[2].x, pos[2].y, labels[2]), pts[3] || makePoint(pos[3].x, pos[3].y, labels[3])];
+      }
+      if (new Set(pts.map(p => p.id)).size === 4) { addShape('quad', pts, def.kind); addedShapes++; }
+      continue;
+    }
+
+    if (def.type === 'segment' || def.type === 'ray' || def.type === 'line' || def.type === 'perp-bisector') {
+      let pts = labels.map(find);
+      if (!pts.every(Boolean)) {
+        const loc = nextSlot();
+        pts = [pts[0] || makePoint(loc.x, loc.y, labels[0]), pts[1] || makePoint(loc.x + 4, loc.y, labels[1])];
+      }
+      if (new Set(pts.map(p => p.id)).size === 2) { addShape(def.type, pts); addedShapes++; }
+    }
+  }
+
+  if (state.mode === 'space') setMode('plane');
+  if (addedShapes) {
+    setTab('geometry');
+    state.selected = null;
+    fitAll();
+  } else if (addedFns) {
+    setTab('function');
+  } else if (addedPoints) {
+    setTab('geometry');
+    state.selected = null;
+    fitAll();
+  }
+  renderAllPanels(); draw(); saveSoon();
+  closeOcr();
+  const bits = [];
+  if (addedFns) bits.push(`${addedFns} 条函数`);
+  if (addedShapes) bits.push(`${addedShapes} 个几何图形`);
+  if (addedPoints) bits.push(`${addedPoints} 个坐标点`);
+  if (!bits.length) bits.push('没有新增对象');
+  toast('已从文字生成：' + bits.join('、'), 'ok');
+  return true;
+}
+
+function fillOcrExample() {
+  const ta = $('#ocrText');
+  if (!ta) return;
+  ta.value = [
+    'y = x^2 - 2x + 1',
+    'y = sin(x)',
+    '等腰三角形 ABC',
+    'A(-5, -2) B(1, -2) C(-2, 4)',
+    '圆 O 半径 2',
+    'O(5, 2)'
+  ].join('\n');
+  setOcrStatus('示例文字已填入，可直接点击「从文字生成」。');
+}
 
 const STORAGE_KEY = 'fg-studio-v1';
 let booted = false;
@@ -4371,6 +4835,38 @@ function bindUI() {
     } else resetView();
   });
   $('#exportBtn').addEventListener('click', exportPNG);
+
+  $('#ocrBtn').addEventListener('click', openOcr);
+  $$('[data-close-ocr]').forEach(el => el.addEventListener('click', closeOcr));
+  const drop = $('#ocrDrop');
+  drop.addEventListener('click', () => $('#ocrFile').click());
+  $('#ocrFile').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (f) setOcrFile(f);
+    e.target.value = '';
+  });
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.add('drag');
+  }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.remove('drag');
+  }));
+  drop.addEventListener('drop', e => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) setOcrFile(f);
+  });
+  $('#ocrRun').addEventListener('click', runOcr);
+  $('#ocrExample').addEventListener('click', fillOcrExample);
+  $('#ocrGenerate').addEventListener('click', () => {
+    const text = $('#ocrText').value;
+    ocrApplyData(text, $('#ocrReplace').checked);
+  });
+  $('#ocrText').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      ocrApplyData(e.target.value, $('#ocrReplace').checked);
+    }
+  });
   $('#zoomIn').addEventListener('click', () => {
     if (state.mode === 'space') { state.space.zoom = clamp(state.space.zoom * 1.2, .35, 5); updateZoomLabel(); draw(); saveSoon(); }
     else { zoomAt(W / 2, H / 2, 1.2); saveSoon(); }
@@ -4381,6 +4877,7 @@ function bindUI() {
   });
 
   window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('#ocrModal').hidden) { e.preventDefault(); closeOcr(); return; }
     const tag = (e.target && e.target.tagName) || '';
     const typing = /INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable);
     if (typing) {
