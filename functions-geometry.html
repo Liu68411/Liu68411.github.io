@@ -323,6 +323,15 @@
   .coord-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:2px}
   .coord-actions .btn{flex:none;white-space:nowrap}
   .coord-actions .btn.primary{width:auto;padding:7px 16px}
+  .param-row{border:1px solid #e6dcc9;background:#fffcf5;border-radius:9px;padding:8px 9px;margin-top:7px}
+  .param-head{display:flex;align-items:center;gap:7px;font-size:10px;color:#8b8272}
+  .param-head b{font-family:"Cambria Math",Georgia,serif;font-style:italic;font-size:15px;color:#7c3aed;min-width:14px}
+  .param-head input{width:66px;border:1px solid #ddd3c0;border-radius:6px;padding:3px 5px;font-size:11px;background:#fff;color:#4b5563;text-align:right}
+  .param-slider{width:100%;margin:7px 0 4px;accent-color:#7c3aed;height:18px}
+  .param-limits{display:flex;gap:8px}
+  .param-limits label{display:flex;align-items:center;gap:4px;flex:1;min-width:0;font-size:9px;color:#9a8f7a;white-space:nowrap}
+  .param-limits label > span{flex:none}
+  .param-limits input{flex:1;width:auto;min-width:0;border:1px solid #e6dcc9;border-radius:5px;padding:2px 4px;font-size:9.5px;background:#fff;color:#6b6253}
   @media(max-width:520px){.coord-fields{grid-template-columns:1fr}}
   .modal-head p{margin:2px 0 0;font-size:10.5px;color:#8b8272}
   .modal-close{border:0;background:#f6f2e9;color:#8b8272;width:28px;height:28px;border-radius:8px;font-size:17px;line-height:1;cursor:pointer;flex:none}
@@ -438,7 +447,7 @@
     <div>
       <div class="kicker">FUNCTION &amp; GEOMETRY STUDIO</div>
       <h1>画函数，<em>也画几何</em></h1>
-      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数或方程看图像、求导与不定积分、查看 f(x)=0 的根与韦达定理，解析圆方程、作圆的切线；再用点、线、三角形与四边形作中点、三点定角、旋转、轴对称，支持输入含根号的坐标建点与整点吸附；三角形和四边形拖动时保持形状，并可输入修改等腰三角形、平行四边形与菱形的内角，并用三点取角 α。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
+      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数或方程看图像、用滑块调节含参函数、求导与不定积分、查看 f(x)=0 的根与韦达定理，解析圆方程、作圆的切线；再用点、线、三角形与四边形作中点、三点定角、旋转、轴对称，支持输入含根号的坐标建点与整点吸附；三角形和四边形拖动时保持形状，并可输入修改等腰三角形、平行四边形与菱形的内角，并用三点取角 α。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
     </div>
     <div class="hero-side">
       <div><i></i>三种画布：平面 / 空间 / 空白</div>
@@ -484,6 +493,7 @@
           </div>
           <div class="chips" id="exampleChips">
             <button class="chip" data-expr="y = x^2 - 2x - 1">y=x²−2x−1</button>
+            <button class="chip" data-expr="a*x^2 + b">a·x²+b</button>
             <button class="chip" data-expr="sin(x)">sin x</button>
             <button class="chip" data-expr="x^3 - 3x">x³−3x</button>
             <button class="chip" data-expr="e^x">eˣ</button>
@@ -494,6 +504,12 @@
           <div class="formula-card">可直接写 <b>y = …</b>、<b>f(x) = …</b>、普通表达式，或圆方程 <b>(x−h)²+(y−k)²=r²</b>。按 <b>Enter</b> 直接绘制；同一函数会复用已有曲线。悬停曲线可查看含 π、e、根号的精确坐标。</div>
           <div class="checks" style="margin-top:8px">
             <label class="check"><input type="checkbox" id="showKeyPoints" checked>标记当前函数关键点（零点 / 轴交点 / 顶点 / 波峰）</label>
+          </div>
+
+          <div class="subcard" id="paramPanel" hidden>
+            <h4>函数参数 <span class="badge">PARAM</span></h4>
+            <div id="paramList"></div>
+            <div class="formula-card" style="margin-top:8px">在表达式里写 <b>a</b>、<b>b</b>、<b>k</b> 等单字母参数，拖动滑块即可实时改变图像；最小 / 最大值可以自定义。</div>
           </div>
 
           <div class="subcard">
@@ -877,6 +893,6 @@
 
 <div class="toast" id="toast"></div>
 <div class="js-error" id="jsError"></div>
-<script src="functions-geometry.js?v=20261130"></script>
+<script src="functions-geometry.js?v=20261132"></script>
 </body>
 </html>

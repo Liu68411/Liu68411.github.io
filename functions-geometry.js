@@ -63,6 +63,7 @@ const state = {
   transformTarget: null,
   preview: null,
   drag: null,
+  paramDragging: false,
   markFirst: null,
   history: [],
   future: [],
@@ -358,6 +359,7 @@ function parseExpression(src) {
       const name = t.value;
       if (name === 'x') return { t: 'var', name: 'x' };
       if (CONSTS[name] !== undefined) return { t: 'const', name };
+      if (/^[a-zA-Z]$/.test(name)) return { t: 'param', name };
       if (FUNCS[name]) {
         if (!eat('(')) throw new Error(`函数 ${name} 后需要括号`);
         const args = [parseAdd()];
@@ -379,6 +381,7 @@ function evalNode(n, x) {
   switch (n.t) {
     case 'num': return n.v;
     case 'var': return x;
+    case 'param': return n.value !== undefined ? n.value : NaN;
     case 'const': return CONSTS[n.name];
     case 'un': return n.op === '-' ? -evalNode(n.a, x) : evalNode(n.a, x);
     case 'bin': {
@@ -503,7 +506,7 @@ function simplify(n) {
 
 function differentiate(n, x = 1) {
   switch (n.t) {
-    case 'num': case 'const': return zero();
+    case 'num': case 'const': case 'param': return zero();
     case 'var': return num(x);
     case 'un': return { t: 'un', op: n.op, a: differentiate(n.a) };
     case 'bin': {
@@ -604,7 +607,7 @@ function detectLinear(n) {
 function integrateNode(n) {
   if (n.t === 'num') return { t: 'bin', op: '*', l: n, r: { t: 'var' } };
   if (n.t === 'var') return { t: 'bin', op: '/', l: { t: 'bin', op: '^', l: { t: 'var' }, r: num(2) }, r: num(2) };
-  if (n.t === 'const') return { t: 'bin', op: '*', l: n, r: { t: 'var' } };
+  if (n.t === 'const' || n.t === 'param') return { t: 'bin', op: '*', l: n, r: { t: 'var' } };
   if (n.t === 'un') {
     const i = integrateNode(n.a);
     return i ? { t: 'un', op: n.op, a: i } : null;
@@ -673,6 +676,7 @@ function toStr(n, parentPrec = 0, side = '') {
   switch (n.t) {
     case 'num': return fmt(n.v, 6);
     case 'var': return 'x';
+    case 'param': return n.name;
     case 'const': return n.name === 'pi' ? 'π' : 'e';
     case 'un': {
       const inner = toStr(n.a, 3);
@@ -700,6 +704,9 @@ function toStr(n, parentPrec = 0, side = '') {
       if (n.op === '-') {
         if (n.r.t === 'un' && n.r.op === '-') return wrap(ls, p, parentPrec) + ' + ' + toStr(n.r.a, p + 1, 'r');
         return wrap(ls, p, parentPrec) + ' - ' + wrap(rs, p + 1, parentPrec);
+      }
+      if (n.r.t === 'num' && n.r.v < 0) {
+        return wrap(ls, p, parentPrec) + ' - ' + wrap(fmt(-n.r.v, 6), p + 1, parentPrec);
       }
       return wrap(ls, p, parentPrec) + ' + ' + wrap(rs, p + 1, parentPrec);
     }
@@ -1521,7 +1528,7 @@ function hoverPair(h) {
 const functionRootCache = new Map();
 function cachedFunctionRoots(fn) {
   const a = s2w({ x: 0, y: 0 }).x, b = s2w({ x: W, y: 0 }).x;
-  const key = `${fn.expr}|${Math.round(a * 100)}|${Math.round(b * 100)}`;
+  const key = `${fn.expr}|${paramSignature(fn)}|${Math.round(a * 100)}|${Math.round(b * 100)}`;
   if (functionRootCache.has(key)) return functionRootCache.get(key);
   const poly = polyFromAst(fn.ast);
   let roots = [];
@@ -2112,7 +2119,7 @@ function captureSnapshot() {
   return {
     mode: state.mode,
     tab: state.tab,
-    functions: state.functions.map(f => ({ id: f.id, expr: f.expr, color: f.color, visible: f.visible })),
+    functions: state.functions.map(f => ({ id: f.id, expr: f.expr, color: f.color, visible: f.visible, params: cloneData(f.params) })),
     activeFnId: state.activeFnId,
     curve: cloneData(state.curve),
     conicResult: cloneData(state.conicResult),
@@ -2136,7 +2143,7 @@ function applySnapshot(snap) {
     for (const f of (s.functions || [])) {
       if (!f || typeof f.expr !== 'string') continue;
       try {
-        fns.push({ id: f.id || uid('f'), expr: f.expr, ast: parseExpression(f.expr), color: f.color || fnColor(fns.length), visible: f.visible !== false });
+        fns.push(buildFunctionRecord({ id: f.id, expr: f.expr, color: f.color || fnColor(fns.length), visible: f.visible !== false, params: f.params }));
       } catch { /* skip broken */ }
     }
     state.functions = fns;
@@ -3392,6 +3399,7 @@ function setTab(tab) {
   updateHint();
   updateTangentUI();
   renderObjectList();
+  renderParamPanel();
   renderAnalysis();
   renderSelection();
   updateTransformUI();
@@ -3583,6 +3591,7 @@ function polyFromAst(n) {
   if (!n) return null;
   if (n.t === 'num') return [n.v];
   if (n.t === 'const') return [n.name === 'pi' ? Math.PI : Math.E];
+  if (n.t === 'param') return null;
   if (n.t === 'var') return [0, 1];
   if (n.t === 'un') {
     const a = polyFromAst(n.a);
@@ -3764,7 +3773,7 @@ function functionKeyPoints(fn) {
   const lo = Math.min(a, b), hi = Math.max(a, b);
   const yBottom = s2w({ x: 0, y: H }).y, yTop = s2w({ x: 0, y: 0 }).y;
   const yLo = Math.min(yBottom, yTop), yHi = Math.max(yBottom, yTop);
-  const key = `${fn.id}|${fn.expr}|${Math.round(lo * 100)}|${Math.round(hi * 100)}|${Math.round(yLo * 100)}|${Math.round(yHi * 100)}`;
+  const key = `${fn.id}|${fn.expr}|${paramSignature(fn)}|${Math.round(lo * 100)}|${Math.round(hi * 100)}|${Math.round(yLo * 100)}|${Math.round(yHi * 100)}`;
   if (keyPointCache.has(key)) return keyPointCache.get(key);
   const poly = polyFromAst(fn.ast);
   const coeffs = poly ? trimPoly(poly) : null;
@@ -4139,6 +4148,7 @@ function shapeDetailHTML(s) {
 function renderAllPanels() {
   syncDerivedPoints();
   renderObjectList();
+  renderParamPanel();
   renderAnalysis();
   renderSelection();
   updateTransformUI();
@@ -4148,6 +4158,130 @@ function renderAllPanels() {
 /* ============================================================
    函数 / 圆锥曲线操作
    ============================================================ */
+
+function collectParams(n, out = []) {
+  if (!n) return out;
+  if (n.t === 'param' && !out.includes(n.name)) out.push(n.name);
+  if (n.t === 'un') collectParams(n.a, out);
+  if (n.t === 'bin') { collectParams(n.l, out); collectParams(n.r, out); }
+  if (n.t === 'call') (n.args || []).forEach(a => collectParams(a, out));
+  return out;
+}
+
+function substituteParams(n, values) {
+  if (!n) return n;
+  if (n.t === 'param') return { t: 'num', v: Number.isFinite(values[n.name]) ? values[n.name] : NaN };
+  if (n.t === 'un') return { t: 'un', op: n.op, a: substituteParams(n.a, values) };
+  if (n.t === 'bin') return { t: 'bin', op: n.op, l: substituteParams(n.l, values), r: substituteParams(n.r, values) };
+  if (n.t === 'call') return { t: 'call', name: n.name, args: (n.args || []).map(a => substituteParams(a, values)) };
+  return n;
+}
+
+function paramSignature(fn) {
+  return (fn.params || []).map(p => `${p.name}:${p.value}`).join(',');
+}
+
+function buildFunctionRecord({ id, expr, color, visible, params }) {
+  const baseAst = parseExpression(expr);
+  const names = collectParams(baseAst);
+  const saved = Array.isArray(params) ? params : [];
+  const defs = names.map(name => {
+    const old = saved.find(p => p && p.name === name) || {};
+    let min = Number.isFinite(old.min) ? old.min : -5;
+    let max = Number.isFinite(old.max) ? old.max : 5;
+    if (min >= max) { min = -5; max = 5; }
+    const step = Number.isFinite(old.step) && old.step > 0 ? old.step : 0.1;
+    const value = clamp(Number.isFinite(old.value) ? old.value : 1, min, max);
+    return { name, min, max, step, value };
+  });
+  const values = {};
+  defs.forEach(p => { values[p.name] = p.value; });
+  return {
+    id: id || uid('f'), expr, baseAst, params: defs,
+    ast: substituteParams(baseAst, values), color, visible: visible !== false
+  };
+}
+
+function renderParamPanel() {
+  const panel = $('#paramPanel'), list = $('#paramList');
+  if (!panel || !list) return;
+  const fn = activeFn();
+  if (!fn || !fn.params || !fn.params.length) {
+    panel.hidden = true;
+    list.innerHTML = '';
+    return;
+  }
+  panel.hidden = false;
+  list.innerHTML = fn.params.map((p, i) => {
+    const sliderStep = Math.min(p.step, Math.max((p.max - p.min) / 200, 1e-6));
+    return `<div class="param-row" data-param-index="${i}">
+    <div class="param-head"><b>${esc(p.name)}</b><span>当前</span><input class="param-value" type="number" step="${p.step}" value="${fmt(p.value, 3)}" aria-label="参数 ${esc(p.name)} 的值"></div>
+    <input class="param-slider" type="range" min="${p.min}" max="${p.max}" step="${sliderStep}" value="${p.value}" aria-label="拖动参数 ${esc(p.name)}">
+    <div class="param-limits">
+      <label>最小 <input class="param-min" type="number" step="${sliderStep}" value="${p.min}"></label>
+      <label>最大 <input class="param-max" type="number" step="${sliderStep}" value="${p.max}"></label>
+    </div>
+  </div>`;
+  }).join('');
+}
+
+let paramAnalysisTimer = null;
+function scheduleParamAnalysis() {
+  clearTimeout(paramAnalysisTimer);
+  paramAnalysisTimer = setTimeout(() => { renderAnalysis(); }, 70);
+}
+
+function setParamValue(fn, index, value) {
+  const p = fn.params[index];
+  if (!p) return;
+  const v = clamp(Number(value), p.min, p.max);
+  if (!Number.isFinite(v)) return;
+  if (!state.paramDragging) { pushHistory(); state.paramDragging = true; }
+  p.value = v;
+  const values = {};
+  fn.params.forEach(q => { values[q.name] = q.value; });
+  fn.ast = substituteParams(fn.baseAst, values);
+  state.calc = null;
+  resetCalcHints();
+  keyPointCache.clear();
+  functionRootCache.clear();
+  const row = $(`#paramList [data-param-index="${index}"]`);
+  if (row) {
+    const slider = row.querySelector('.param-slider'), val = row.querySelector('.param-value');
+    if (slider) slider.value = v;
+    if (val && document.activeElement !== val) val.value = fmt(v, 3);
+  }
+  draw();
+  scheduleParamAnalysis();
+  saveSoon();
+}
+
+function setParamRange(fn, index, field, value) {
+  const p = fn.params[index];
+  if (!p) return;
+  const v = Number(value);
+  if (!Number.isFinite(v)) { renderParamPanel(); return; }
+  if (!state.paramDragging) { pushHistory(); state.paramDragging = true; }
+  if (field === 'min') {
+    if (v >= p.max) { toast('最小值需要小于最大值', 'warn'); renderParamPanel(); return; }
+    p.min = v;
+  } else {
+    if (v <= p.min) { toast('最大值需要大于最小值', 'warn'); renderParamPanel(); return; }
+    p.max = v;
+  }
+  p.value = clamp(p.value, p.min, p.max);
+  const values = {};
+  fn.params.forEach(q => { values[q.name] = q.value; });
+  fn.ast = substituteParams(fn.baseAst, values);
+  state.calc = null;
+  resetCalcHints();
+  keyPointCache.clear();
+  functionRootCache.clear();
+  renderParamPanel();
+  draw();
+  renderAnalysis();
+  saveSoon();
+}
 
 function normalizeFunctionInput(raw) {
   let s = String(raw || '').trim()
@@ -4245,8 +4379,8 @@ function addFunctionFromInput() {
   let exprText;
   try { exprText = normalizeFunctionInput(raw); }
   catch (err) { toast(err.message, 'warn'); input.focus(); return; }
-  let ast;
-  try { ast = parseExpression(exprText); }
+  let baseAst;
+  try { baseAst = parseExpression(exprText); }
   catch (err) { toast('表达式有误：' + err.message, 'bad'); input.focus(); return; }
   const existing = state.functions.find(f => f.expr.replace(/\s+/g, '') === exprText.replace(/\s+/g, ''));
   if (existing) {
@@ -4260,10 +4394,9 @@ function addFunctionFromInput() {
     draw(); saveSoon();
     return;
   }
-  const fn = {
-    id: uid('f'), expr: exprText, ast, color: fnColor(state.functions.length),
-    visible: true
-  };
+  const fn = buildFunctionRecord({
+    expr: exprText, color: fnColor(state.functions.length), visible: true
+  });
   pushHistory();
   state.functions.push(fn);
   if (state.functions.length > 6) {
@@ -4276,7 +4409,7 @@ function addFunctionFromInput() {
   resetCalcHints();
   state.analysisMode = 'function';
   if (state.tab !== 'function') setTab('function');
-  renderObjectList(); renderAnalysis(); draw(); saveSoon();
+  renderObjectList(); renderParamPanel(); renderAnalysis(); draw(); saveSoon();
 }
 
 function resetCalcHints() {
@@ -4295,7 +4428,7 @@ function selectFunction(id) {
   state.analysisMode = 'function';
   if (state.mode === 'space') setMode('plane');
   if (state.tab !== 'function') setTab('function');
-  renderObjectList(); renderAnalysis(); draw(); saveSoon();
+  renderObjectList(); renderParamPanel(); renderAnalysis(); draw(); saveSoon();
 }
 
 function computeDerivative() {
@@ -4907,7 +5040,7 @@ function deleteObject(kind, id) {
       resetCalcHints();
       if (state.activeFnId) $('#exprInput').value = activeFn().expr;
     }
-    renderObjectList(); renderAnalysis(); draw(); saveSoon();
+    renderObjectList(); renderParamPanel(); renderAnalysis(); draw(); saveSoon();
     return;
   }
   if (kind === 'curve') {
@@ -5339,7 +5472,7 @@ let ocrEnginePromise = null;
 
 function astUsesVariable(n) {
   if (!n) return false;
-  if (n.t === 'var') return true;
+  if (n.t === 'var' || n.t === 'param') return true;
   if (n.t === 'un') return astUsesVariable(n.a);
   if (n.t === 'bin') return astUsesVariable(n.l) || astUsesVariable(n.r);
   if (n.t === 'call') return (n.args || []).some(astUsesVariable);
@@ -5695,13 +5828,12 @@ function ocrApplyData(text, replace) {
   let addedFns = 0;
   for (const expr of functions) {
     if (state.functions.some(f => f.expr.replace(/\s+/g, '') === expr)) continue;
-    let ast;
-    try { ast = parseExpression(expr); } catch { continue; }
+    let fn;
+    try { fn = buildFunctionRecord({ expr, color: fnColor(state.functions.length), visible: true }); } catch { continue; }
     if (state.functions.length >= 6) {
       const removed = state.functions.shift();
       if (state.activeFnId === removed.id) state.activeFnId = null;
     }
-    const fn = { id: uid('f'), expr, ast, color: fnColor(state.functions.length), visible: true };
     state.functions.push(fn);
     state.activeFnId = fn.id;
     addedFns++;
@@ -5857,7 +5989,7 @@ function saveState() {
       v: 1,
       mode: state.mode,
       tab: state.tab,
-      functions: state.functions.map(f => ({ id: f.id, expr: f.expr, color: f.color, visible: f.visible })),
+      functions: state.functions.map(f => ({ id: f.id, expr: f.expr, color: f.color, visible: f.visible, params: cloneData(f.params) })),
       activeFnId: state.activeFnId,
       curve: state.curve,
       conicResult: state.conicResult,
@@ -5902,8 +6034,7 @@ function restoreState() {
     for (const f of (data.functions || [])) {
       if (!f || typeof f.expr !== 'string') continue;
       try {
-        const ast = parseExpression(f.expr);
-        fns.push({ id: f.id || uid('f'), expr: f.expr, ast, color: f.color || fnColor(fns.length), visible: f.visible !== false });
+        fns.push(buildFunctionRecord({ id: f.id, expr: f.expr, color: f.color || fnColor(fns.length), visible: f.visible !== false, params: f.params }));
       } catch { /* 忽略损坏的旧表达式 */ }
     }
     state.functions = fns;
@@ -5972,6 +6103,26 @@ function bindUI() {
   $('#integralBtn').addEventListener('click', computeIntegral);
   $('#aInput').addEventListener('keydown', e => { if (e.key === 'Enter') computeIntegral(); });
   $('#bInput').addEventListener('keydown', e => { if (e.key === 'Enter') computeIntegral(); });
+  $('#paramList').addEventListener('input', e => {
+    const row = e.target.closest('[data-param-index]');
+    const fn = activeFn();
+    if (!row || !fn) return;
+    const idx = Number(row.dataset.paramIndex);
+    if (e.target.classList.contains('param-slider') || e.target.classList.contains('param-value')) {
+      if (e.target.value === '') return;
+      setParamValue(fn, idx, e.target.value);
+    }
+  });
+  $('#paramList').addEventListener('change', e => {
+    const row = e.target.closest('[data-param-index]');
+    const fn = activeFn();
+    if (!row || !fn) return;
+    const idx = Number(row.dataset.paramIndex);
+    if (e.target.classList.contains('param-min')) setParamRange(fn, idx, 'min', e.target.value);
+    else if (e.target.classList.contains('param-max')) setParamRange(fn, idx, 'max', e.target.value);
+    state.paramDragging = false;
+  });
+
   ['showTangent', 'showDerivative', 'showArea'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', () => { draw(); saveSoon(); });
