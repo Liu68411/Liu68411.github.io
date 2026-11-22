@@ -158,6 +158,13 @@
   .quad-editor .apex-hint{color:#7691bd}
   .quad-editor .angle-chip{background:#fff;border-color:#dbe5f5;color:#5b77a3}
   .quad-editor .angle-chip:hover{border-color:#2563eb;background:#eff5ff;color:#1d4ed8}
+  .tangent-card{border-color:#d5e7f5;background:linear-gradient(180deg,#fbfdff,#fbf8f1)}
+  .tangent-card .go-sq{color:#2563eb;border-color:#cfe0f5}
+  .tangent-card .go-sq:hover{border-color:#2563eb;background:#eff5ff}
+  .tangent-card .btn.active{border-color:#2563eb;background:#eff5ff;color:#1d4ed8}
+  .tangent-eq{border-top:1px dashed #dce6f4;padding-top:6px;margin-top:6px;font-family:"Cambria Math",Georgia,serif;font-size:11px;line-height:1.65;color:#334155;word-break:break-word}
+  .tangent-eq b{color:#1d4ed8;font-weight:700}
+  .tangent-eq .small{font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:#8b8272;font-size:9px}
   .inline-fields{display:flex;gap:7px;align-items:flex-end}
   .inline-fields .f{flex:1;min-width:0}
   .inline-fields label{display:block;font-size:9.5px;font-weight:800;color:#9a8f7a;margin-bottom:3px}
@@ -417,7 +424,7 @@
     <div>
       <div class="kicker">FUNCTION &amp; GEOMETRY STUDIO</div>
       <h1>画函数，<em>也画几何</em></h1>
-      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数看图像、求导与积分，生成圆、椭圆和圆锥曲线；再用点、线、三角形与四边形作中点、三点定角、旋转、轴对称；三角形和四边形拖动时保持形状，并可输入修改等腰三角形、平行四边形与菱形的内角，并用三点取角 α。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
+      <p>在平面直角坐标系、空间直角坐标系和空白画布之间切换：输入函数或方程看图像、求导与不定积分，解析圆方程、作圆的切线；再用点、线、三角形与四边形作中点、三点定角、旋转、轴对称；三角形和四边形拖动时保持形状，并可输入修改等腰三角形、平行四边形与菱形的内角，并用三点取角 α。也可以上传题目截图，识别文字后自动建立函数和几何图形。</p>
     </div>
     <div class="hero-side">
       <div><i></i>三种画布：平面 / 空间 / 空白</div>
@@ -455,14 +462,14 @@
 
       <div class="tab-body" id="tabBody">
         <section class="tab-pane active" data-pane="function">
-          <div class="field-label">函数表达式 <span>支持 sin / cos / ln / sqrt / abs</span></div>
+          <div class="field-label">函数 / 方程 <span>可写 y=…、f(x)=… 或直接写表达式</span></div>
           <div class="expr-row">
-            <span class="fx">f(x) =</span>
-            <input id="exprInput" value="x^2 - 2x - 1" spellcheck="false" autocomplete="off" aria-label="函数表达式">
+            <span class="fx" title="可直接输入函数或方程">ƒ</span>
+            <input id="exprInput" value="x^2 - 2x - 1" placeholder="x^2-2x-1 · y=x^2-1 · f(x)=sin(x)" spellcheck="false" autocomplete="off" aria-label="函数或方程">
             <button class="mini-btn" id="plotBtn">绘制</button>
           </div>
           <div class="chips" id="exampleChips">
-            <button class="chip" data-expr="x^2 - 2x - 1">x²−2x−1</button>
+            <button class="chip" data-expr="y = x^2 - 2x - 1">y=x²−2x−1</button>
             <button class="chip" data-expr="sin(x)">sin x</button>
             <button class="chip" data-expr="x^3 - 3x">x³−3x</button>
             <button class="chip" data-expr="e^x">eˣ</button>
@@ -470,7 +477,7 @@
             <button class="chip" data-expr="1/x">1/x</button>
             <button class="chip" data-expr="sqrt(x)">√x</button>
           </div>
-          <div class="formula-card">拖动空白处平移，滚轮缩放。按 <b>Enter</b> 直接绘制；同一表达式会复用已有曲线。</div>
+          <div class="formula-card">可直接写 <b>y = …</b>、<b>f(x) = …</b>、普通表达式，或圆方程 <b>(x−h)²+(y−k)²=r²</b>。按 <b>Enter</b> 直接绘制；同一函数会复用已有曲线。</div>
 
           <div class="subcard">
             <h4>求导 <span class="badge">DERIVATIVE</span></h4>
@@ -486,7 +493,7 @@
           </div>
 
           <div class="subcard">
-            <h4>定积分 <span class="badge">INTEGRAL</span></h4>
+            <h4>定积分 / 不定积分 <span class="badge">INTEGRAL</span></h4>
             <div class="inline-fields">
               <div class="f"><label>下限 a</label><input id="aInput" value="-1" inputmode="decimal"></div>
               <div class="f"><label>上限 b</label><input id="bInput" value="2" inputmode="decimal"></div>
@@ -494,7 +501,6 @@
             </div>
             <div class="checks">
               <label class="check"><input type="checkbox" id="showArea" checked>显示曲边梯形</label>
-              <label class="check"><input type="checkbox" id="showAntiderivative">显示原函数</label>
             </div>
             <div class="formula-card" id="integralHint">用自适应 Simpson 法计算定积分，并给出可符号化的原函数。</div>
           </div>
@@ -511,6 +517,29 @@
           <div id="conicFields"></div>
           <button class="primary" id="conicBtn">生成并绘制曲线</button>
           <div class="formula-card" id="conicFormula">圆心 (0, 0)，半径 3 时，方程为 x² + y² = 9。</div>
+
+          <div id="circleTools" hidden>
+            <div class="subcard" style="margin-top:10px">
+              <h4>直接输入圆的方程 <span class="badge">CIRCLE EQ</span></h4>
+              <div class="expr-row">
+                <span class="fx">○</span>
+                <input id="circleEqInput" placeholder="(x-2)^2 + (y+1)^2 = 9" spellcheck="false" autocomplete="off">
+                <button class="mini-btn" id="circleEqBtn">解析</button>
+              </div>
+              <div class="formula-card" id="circleEqHint" style="margin-top:7px">支持标准式 <b>(x−h)²+(y−k)²=r²</b> 和一般式 <b>x²+y²+Dx+Ey+F=0</b>。</div>
+            </div>
+            <div class="subcard tangent-card" style="margin-top:10px">
+              <h4>圆的切线 <span class="badge teal">TANGENT</span></h4>
+              <div class="inline-fields">
+                <div class="f"><label>x₀</label><input id="tangentX" value="3" inputmode="decimal"></div>
+                <div class="f"><label>y₀</label><input id="tangentY" value="0" inputmode="decimal"></div>
+                <button class="go-sq" id="tangentDraw" title="用这个点作圆的切线">↗</button>
+              </div>
+              <button class="btn" id="tangentPick" style="width:100%;margin-top:7px">在画布上选一点作切线</button>
+              <div class="formula-card" id="tangentResult" style="margin-top:7px">先生成圆，再选择圆上一点或圆外一点。</div>
+            </div>
+          </div>
+
           <div class="hint-box"><span>◎</span><div>生成后可在右侧查看<b>标准方程、焦点、离心率、准线或渐近线</b>。圆锥曲线会叠加在当前平面画布上。</div></div>
         </section>
 

@@ -45,6 +45,8 @@ const state = {
     hyperbola: { h: 0, k: 0, a: 3, b: 2, orient: 'horizontal' }
   },
   conicResult: null,
+  circleTangent: null,
+  tangentPicking: false,
   analysisMode: 'function',
   calc: null,
   rotateExpr: '180 - 2α',
@@ -903,7 +905,10 @@ function draw() {
     ctx.fillRect(0, 0, W, H);
     if (state.mode === 'plane') drawGrid();
     if (state.tab === 'function') drawFunctions();
-    if (state.tab === 'conic' && state.curve && state.curve.visible !== false) drawConic(state.curve);
+    if (state.tab === 'conic' && state.curve && state.curve.visible !== false) {
+      drawConic(state.curve);
+      drawCircleTangent();
+    }
     if (state.tab === 'geometry') drawGeometry();
     drawPendingPreview();
   }
@@ -1114,7 +1119,7 @@ function drawFunctions() {
     ctx.fillStyle = '#a89d88';
     ctx.font = '13px "PingFang SC","Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('输入一个函数，开始画图', W / 2, H * .45 + 120);
+    ctx.fillText('输入一个函数或方程，开始画图', W / 2, H * .45 + 120);
     ctx.restore();
     return;
   }
@@ -1498,7 +1503,10 @@ function updateLegend() {
       if ($('#showArea') && $('#showArea').checked && state.calc && state.calc.integral) html += '<div><i style="background:rgba(124,58,237,.3)"></i>积分区域</div>';
     }
   } else if (state.tab === 'conic') {
-    if (state.curve && state.curve.visible !== false) html = `<div><i style="background:#7c3aed"></i>${esc(state.curve.kind === 'circle' ? '圆' : state.curve.kind === 'ellipse' ? '椭圆' : state.curve.kind === 'parabola' ? '抛物线' : '双曲线')}</div><div>${esc(state.curve.equation)}</div>`;
+    if (state.curve && state.curve.visible !== false) {
+      html = `<div><i style="background:#7c3aed"></i>${esc(state.curve.kind === 'circle' ? '圆' : state.curve.kind === 'ellipse' ? '椭圆' : state.curve.kind === 'parabola' ? '抛物线' : '双曲线')}</div><div>${esc(state.curve.equation)}</div>`;
+      if (state.circleTangent) html += '<div><i class="dash" style="color:#e11d48"></i>圆的切线</div>';
+    }
   } else if (state.tab === 'geometry') {
     html = '<div><i style="background:#0f766e"></i>顶点 / 图形</div><div><i class="dash" style="color:#b45309"></i>平分线 / 中点</div>';
     html += '<div style="color:#8b8272">刻线 = 等边 · 角弧 = 等角 · 箭头 = 平行</div>';
@@ -1834,6 +1842,7 @@ function captureSnapshot() {
     conicResult: cloneData(state.conicResult),
     conicType: state.conicType,
     conicParams: cloneData(state.conicParams),
+    circleTangent: cloneData(state.circleTangent),
     calc: cloneData(state.calc),
     rotateExpr: state.rotateExpr,
     keepOriginal: state.keepOriginal,
@@ -1857,6 +1866,8 @@ function applySnapshot(snap) {
     state.activeFnId = fns.some(f => f.id === s.activeFnId) ? s.activeFnId : (fns[0] ? fns[0].id : null);
     state.curve = cloneData(s.curve) || null;
     state.conicResult = cloneData(s.conicResult) || null;
+    state.circleTangent = cloneData(s.circleTangent) || null;
+    state.tangentPicking = false;
     if (s.conicType) state.conicType = s.conicType;
     if (s.conicParams) state.conicParams = Object.assign(cloneData(state.conicParams), cloneData(s.conicParams));
     state.calc = cloneData(s.calc) || null;
@@ -1884,6 +1895,7 @@ function applySnapshot(snap) {
     const act = activeFn();
     if (input && act) input.value = act.expr;
     updateTransformUI();
+    updateTangentUI();
     renderAllPanels();
     draw();
     saveSoon();
@@ -3095,8 +3107,10 @@ function setTab(tab) {
   $('#rightTag').textContent = tab === 'function' ? '函数' : tab === 'conic' ? '圆锥曲线' : '几何';
   $('#canvasModeText').textContent = tab === 'function' ? '函数图像' : tab === 'conic' ? '圆锥曲线' : '几何作图';
   state.analysisMode = tab === 'conic' ? 'conic' : 'function';
+  if (tab !== 'conic') state.tangentPicking = false;
   updateModeStatus();
   updateHint();
+  updateTangentUI();
   renderObjectList();
   renderAnalysis();
   renderSelection();
@@ -3279,6 +3293,12 @@ function renderAnalysis() {
     html += `<div class="math-line">${escMath(c.equation)}</div>`;
     if (c.general) html += `<div class="math-line" style="font-size:11.5px;color:#7a6f5c;margin-top:2px">一般式：${escMath(c.general)}</div>`;
     html += '<div class="metric-grid">' + c.props.map(([k, v]) => `<div class="metric"><span>${esc(k)}</span><b class="math" title="${esc(v)}">${esc(v)}</b></div>`).join('') + '</div>';
+    if (c.kind === 'circle' && state.circleTangent) {
+      const t = state.circleTangent;
+      html += `<div style="margin-top:12px"><div class="analysis-title"><span class="tag" style="background:#ffe4ea;color:#be123c">TANGENT</span>切线方程</div>`;
+      html += `<div class="math-line" style="font-size:11.5px">${t.lines.map(line => `${line.label ? esc(line.label) + '：' : ''}${escMath(line.equation)}`).join('<br>')}</div>`;
+      html += '</div>';
+    }
     html += `<button class="btn" data-copy="${esc(c.equation)}" style="margin-top:8px">复制方程</button>`;
     box.innerHTML = html;
     return;
@@ -3287,7 +3307,7 @@ function renderAnalysis() {
   const fn = activeFn();
   if (!fn) {
     meta.textContent = '等待绘制';
-    box.innerHTML = '<div class="analysis-empty">输入一个函数表达式，点击「绘制」或按 Enter。支持幂函数、三角、指数、对数、根式与绝对值。</div>';
+    box.innerHTML = '<div class="analysis-empty">输入函数或方程，点击「绘制」或按 Enter。支持 y=…、f(x)=…、普通表达式，以及圆的标准式 / 一般式方程。</div>';
     return;
   }
   meta.textContent = '函数';
@@ -3298,7 +3318,7 @@ function renderAnalysis() {
   const calc = state.calc && state.calc.fnId === fn.id ? state.calc : null;
   if (calc && calc.deriv) {
     const d = calc.deriv;
-    html += `<div style="margin-top:11px"><div class="analysis-title"><span class="tag amber">DERIVATIVE</span>求导结果</div>`;
+    html += `<div style="margin-top:11px"><div class="analysis-title"><span class="tag amber">DERIVATIVE</span>导函数解析式</div>`;
     html += `<div class="math-line">f′(x) = ${escMath(d.expr)}</div>`;
     html += `<div class="metric-grid">
       <div class="metric"><span>x₀</span><b>${fmt(d.x0)}</b></div>
@@ -3309,30 +3329,58 @@ function renderAnalysis() {
   }
   if (calc && calc.integral) {
     const it = calc.integral;
-    html += `<div style="margin-top:11px"><div class="analysis-title"><span class="tag">INTEGRAL</span>定积分</div>`;
+    html += `<div style="margin-top:11px"><div class="analysis-title"><span class="tag">INTEGRAL</span>定积分 / 不定积分</div>`;
     if (it.singular) {
       html += '<div class="analysis-empty" style="color:#92400e">区间内存在不连续点或奇点，数值积分无法给出稳定结果。</div>';
     } else {
       html += `<div class="math-line">∫<sub>${fmt(it.a)}</sub><sup>${fmt(it.b)}</sup> f(x) dx ≈ <b>${fmt(it.value, 6)}</b></div>`;
     }
-    const showAnti = $('#showAntiderivative') && $('#showAntiderivative').checked;
-    if (showAnti && it.antideriv) html += `<div class="math-line" style="margin-top:3px">F(x) = ${escMath(it.antideriv)} + C</div>`;
-    else if (showAnti && !it.antideriv) html += '<div class="analysis-empty" style="margin-top:5px">该函数暂未找到初等原函数，仍可用数值方式计算定积分。</div>';
+    if (it.antideriv) {
+      html += `<div class="math-line" style="margin-top:5px">∫ f(x) dx = ${escMath(it.antideriv)} + C</div>`;
+    } else {
+      html += '<div class="analysis-empty" style="margin-top:5px">该函数暂未找到初等原函数，仍可用数值方式计算定积分。</div>';
+    }
     html += `<div class="metric-grid"><div class="metric"><span>积分区间</span><b>${fmt(it.a)} → ${fmt(it.b)}</b></div><div class="metric"><span>方法</span><b>Simpson</b></div></div></div>`;
   }
   box.innerHTML = html;
 }
 
+function prettyLineCoefficients(A, B, C) {
+  const scales = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 80, 100];
+  for (const k of scales) {
+    const ai = Math.round(A * k), bi = Math.round(B * k), ci = Math.round(C * k);
+    if (Math.abs(A * k - ai) < 2e-5 && Math.abs(B * k - bi) < 2e-5 && Math.abs(C * k - ci) < 2e-5) {
+      const gcd = (x, y) => y ? gcd(y, x % y) : Math.abs(x);
+      let g = gcd(gcd(ai, bi), ci) || 1;
+      return [ai / g, bi / g, ci / g];
+    }
+  }
+  return null;
+}
+
 function lineEquation(a, b) {
   let A = b.y - a.y, B = a.x - b.x, C = b.x * a.y - a.x * b.y;
-  const l = Math.hypot(A, B) || 1;
-  A /= l; B /= l; C /= l;
   if (A < -1e-9 || (Math.abs(A) < 1e-9 && B < 0)) { A = -A; B = -B; C = -C; }
-  return `${fmtCoef(A)}x ${fmtSigned(B)}y ${fmtSigned(C)} = 0`;
+  const pretty = prettyLineCoefficients(A, B, C);
+  if (pretty) {
+    A = pretty[0]; B = pretty[1]; C = pretty[2];
+  } else {
+    const l = Math.hypot(A, B) || 1;
+    A /= l; B /= l; C /= l;
+  }
+  let s = '';
+  if (Math.abs(A) > 1e-9) s = `${fmtCoef(A)}x`;
+  if (Math.abs(B) > 1e-9) {
+    if (s) s += ` ${fmtSigned(B)}y`;
+    else s = `${fmtCoef(B)}y`;
+  }
+  if (Math.abs(C) > 1e-9) s += ` ${fmtSigned(C)}`;
+  if (!s) s = '0';
+  return `${s} = 0`;
 }
 function fmtCoef(v) {
-  if (Math.abs(v - 1) < 1e-9) return '';
-  if (Math.abs(v + 1) < 1e-9) return '−';
+  if (Math.abs(v - 1) < 5e-4) return '';
+  if (Math.abs(v + 1) < 5e-4) return '−';
   return fmt(v);
 }
 
@@ -3500,14 +3548,106 @@ function renderAllPanels() {
    函数 / 圆锥曲线操作
    ============================================================ */
 
+function normalizeFunctionInput(raw) {
+  let s = String(raw || '').trim()
+    .replace(/[−–—]/g, '-')
+    .replace(/[（]/g, '(').replace(/[）]/g, ')')
+    .replace(/[＝]/g, '=')
+    .replace(/²/g, '^2');
+  s = s.replace(/^y\s*=\s*/i, '');
+  s = s.replace(/^[a-zA-Z]\s*\(\s*x\s*\)\s*=\s*/i, '');
+  s = s.trim();
+  if (!s) throw new Error('等号后面没有表达式');
+  if (s.includes('=')) throw new Error('暂不支持这种隐式方程；圆方程可直接输入 (x−h)²+(y−k)²=r²');
+  return s;
+}
+
+function coefficientOfToken(token) {
+  if (token === '' || token === '+') return 1;
+  if (token === '-') return -1;
+  const n = parseFloat(token);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseCircleEquation(raw) {
+  if (typeof raw !== 'string' || !raw.includes('=')) return null;
+  let s = raw.trim()
+    .replace(/[−–—]/g, '-')
+    .replace(/[（]/g, '(').replace(/[）]/g, ')')
+    .replace(/²/g, '^2')
+    .replace(/[＝]/g, '=')
+    .replace(/\s+/g, '');
+  if (/^(y|[a-zA-Z]\(x\))=/i.test(s)) return null;
+  let m = s.match(/^\(x([+-]\d+(?:\.\d+)?)?\)\^2\+\(y([+-]\d+(?:\.\d+)?)?\)\^2=(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const h = -parseFloat(m[1] || '0');
+    const k = -parseFloat(m[2] || '0');
+    const r2 = parseFloat(m[3]);
+    if (!(r2 > 0)) return null;
+    return { h, k, r: Math.sqrt(r2), source: raw };
+  }
+  const parts = s.split('=');
+  if (parts.length !== 2) return null;
+  let body = parts[0], rhs = parts[1];
+  if (rhs !== '0') {
+    if (!/^[+-]?\d+(?:\.\d+)?$/.test(rhs)) return null;
+    body += rhs.startsWith('-') ? '+' + rhs.slice(1) : '-' + rhs;
+  }
+  body = body.replace(/\*/g, '');
+  const terms = body.replace(/-/g, '+-').split('+').filter(Boolean);
+  if (!terms.length) return null;
+  let A = 0, B = 0, D = 0, E = 0, F = 0;
+  for (const term of terms) {
+    let mm;
+    if ((mm = term.match(/^([+-]?\d*\.?\d*)x\^2$/))) A += coefficientOfToken(mm[1]);
+    else if ((mm = term.match(/^([+-]?\d*\.?\d*)y\^2$/))) B += coefficientOfToken(mm[1]);
+    else if ((mm = term.match(/^([+-]?\d*\.?\d*)x$/))) D += coefficientOfToken(mm[1]);
+    else if ((mm = term.match(/^([+-]?\d*\.?\d*)y$/))) E += coefficientOfToken(mm[1]);
+    else if ((mm = term.match(/^([+-]?\d*\.?\d*)$/))) F += coefficientOfToken(mm[1]);
+    else return null;
+  }
+  if (Math.abs(A) < 1e-9 || Math.abs(B) < 1e-9 || Math.abs(A - B) > 1e-6) return null;
+  const h = -D / (2 * A), k = -E / (2 * A);
+  const r2 = h * h + k * k - F / A;
+  if (!(r2 > 1e-8)) return null;
+  return { h, k, r: Math.sqrt(r2), source: raw };
+}
+
+function applyCircleEquation(raw) {
+  const c = parseCircleEquation(raw);
+  if (!c) {
+    toast('无法识别为圆方程。支持 (x−h)²+(y−k)²=r² 与 x²+y²+Dx+Ey+F=0', 'warn');
+    return false;
+  }
+  pushHistory();
+  state.conicType = 'circle';
+  state.conicParams.circle = { h: c.h, k: c.k, r: c.r };
+  state.circleTangent = null;
+  state.tangentPicking = false;
+  $$('.conic-type').forEach(b => b.classList.toggle('active', b.dataset.conic === 'circle'));
+  renderConicFields();
+  generateConic(false);
+  const eqInput = $('#circleEqInput');
+  if (eqInput) eqInput.value = raw;
+  return true;
+}
+
 function addFunctionFromInput() {
   const input = $('#exprInput');
   const raw = input.value.trim();
-  if (!raw) { toast('请输入函数表达式', 'warn'); input.focus(); return; }
+  if (!raw) { toast('请输入函数或方程', 'warn'); input.focus(); return; }
+  if (parseCircleEquation(raw)) {
+    applyCircleEquation(raw);
+    input.focus();
+    return;
+  }
+  let exprText;
+  try { exprText = normalizeFunctionInput(raw); }
+  catch (err) { toast(err.message, 'warn'); input.focus(); return; }
   let ast;
-  try { ast = parseExpression(raw); }
+  try { ast = parseExpression(exprText); }
   catch (err) { toast('表达式有误：' + err.message, 'bad'); input.focus(); return; }
-  const existing = state.functions.find(f => f.expr.replace(/\s+/g, '') === raw.replace(/\s+/g, ''));
+  const existing = state.functions.find(f => f.expr.replace(/\s+/g, '') === exprText.replace(/\s+/g, ''));
   if (existing) {
     state.activeFnId = existing.id;
     state.analysisMode = 'function';
@@ -3520,7 +3660,7 @@ function addFunctionFromInput() {
     return;
   }
   const fn = {
-    id: uid('f'), expr: raw, ast, color: fnColor(state.functions.length),
+    id: uid('f'), expr: exprText, ast, color: fnColor(state.functions.length),
     visible: true
   };
   pushHistory();
@@ -3625,15 +3765,19 @@ function computeIntegral() {
   if (areaToggle) areaToggle.checked = true;
   const hint = $('#integralHint');
   if (hint) {
-    hint.innerHTML = r.singular
+    let msg = r.singular
       ? '区间内存在不连续点或奇点，未能得到稳定的定积分值。'
-      : `<b>∫<sub>${esc(fmt(a))}</sub><sup>${esc(fmt(b))}</sup> f(x) dx ≈ ${esc(fmt(r.value, 6))}</b>${antideriv ? `<br>原函数 F(x) = ${esc(antideriv)} + C` : ''}`;
+      : `<b>∫<sub>${esc(fmt(a))}</sub><sup>${esc(fmt(b))}</sup> f(x) dx ≈ ${esc(fmt(r.value, 6))}</b>`;
+    msg += antideriv
+      ? `<br>不定积分：∫ f(x) dx = ${esc(antideriv)} + C`
+      : '<br>不定积分：暂未找到初等原函数。';
+    hint.innerHTML = msg;
   }
   renderAnalysis();
   if (state.mode === 'space') setMode('plane');
   draw(); saveSoon();
   if (r.singular) toast('区间内存在奇点，未得到稳定的积分值。', 'warn');
-  else toast('定积分 ≈ ' + fmt(r.value, 6), 'ok');
+  else toast('已计算定积分与不定积分。', 'ok');
 }
 
 /* ---------- 圆锥曲线表单 ---------- */
@@ -3675,11 +3819,18 @@ function renderConicFields() {
       const key = el.dataset.ck;
       const val = el.tagName === 'SELECT' ? el.value : (parseFloat(el.value) || 0);
       state.conicParams[type][key] = val;
+      if (type === 'circle' && state.circleTangent) {
+        state.circleTangent = null;
+        updateTangentUI();
+      }
       updateConicPreview();
       saveSoon();
     });
   });
   updateConicPreview();
+  const tools = $('#circleTools');
+  if (tools) tools.hidden = type !== 'circle';
+  updateTangentUI();
 }
 
 function updateConicPreview() {
@@ -3693,21 +3844,132 @@ function updateConicPreview() {
   }
 }
 
-function generateConic() {
+function generateConic(recordHistory = true) {
   try {
     const c = buildConic(state.conicType, state.conicParams[state.conicType]);
     c.visible = true;
-    pushHistory();
+    if (recordHistory) pushHistory();
     state.curve = c;
     state.conicResult = c;
+    state.circleTangent = null;
+    state.tangentPicking = false;
     state.analysisMode = 'conic';
     if (state.mode === 'space') setMode('plane');
     if (state.tab !== 'conic') setTab('conic');
     fitCurve(c);
-    renderObjectList(); renderAnalysis(); draw(); saveSoon();
+    if (c.kind === 'circle') {
+      const tx = $('#tangentX'), ty = $('#tangentY');
+      if (tx) tx.value = fmt(c.h + c.r, 3);
+      if (ty) ty.value = fmt(c.k, 3);
+    }
+    renderObjectList(); renderAnalysis(); updateTangentUI(); draw(); saveSoon();
     toast('已生成' + (c.kind === 'circle' ? '圆' : c.kind === 'ellipse' ? '椭圆' : c.kind === 'parabola' ? '抛物线' : '双曲线') + '，右侧可查看全部性质。', 'ok');
   } catch (err) {
     toast(err.message, 'bad');
+  }
+}
+
+/* ---------- 圆的切线 ---------- */
+
+function computeCircleTangent(point) {
+  const c = state.curve;
+  if (!c || c.kind !== 'circle') { toast('请先生成一个圆', 'warn'); return false; }
+  const q = { x: Number(point.x), y: Number(point.y) };
+  if (!Number.isFinite(q.x) || !Number.isFinite(q.y)) { toast('切点坐标无效', 'warn'); return false; }
+  const dx = q.x - c.h, dy = q.y - c.k;
+  const d = Math.hypot(dx, dy);
+  if (d < 1e-8) { toast('圆心处不能作切线', 'warn'); return false; }
+  const tol = Math.max(8 / Math.max(1e-6, scale2d()), c.r * 0.004);
+  let kind, tangentPoints = [], lines = [], picked = q;
+  if (Math.abs(d - c.r) <= tol) {
+    const ux = dx / d, uy = dy / d;
+    const T = { x: c.h + ux * c.r, y: c.k + uy * c.r };
+    const dir = { x: -uy, y: ux };
+    picked = T;
+    kind = 'on';
+    tangentPoints = [T];
+    lines = [{ p1: T, p2: { x: T.x + dir.x, y: T.y + dir.y }, equation: lineEquation(T, { x: T.x + dir.x, y: T.y + dir.y }) }];
+  } else if (d > c.r) {
+    const theta = Math.atan2(dy, dx);
+    const phi = Math.acos(clamp(c.r / d, -1, 1));
+    for (const [sign, label] of [[1, 'T₁'], [-1, 'T₂']]) {
+      const a = theta + sign * phi;
+      const T = { x: c.h + c.r * Math.cos(a), y: c.k + c.r * Math.sin(a) };
+      tangentPoints.push(T);
+      lines.push({ p1: q, p2: T, equation: lineEquation(q, T), label });
+    }
+    kind = 'external';
+  } else {
+    toast('点在圆内，过该点没有圆的切线', 'warn');
+    state.tangentPicking = false;
+    updateTangentUI();
+    return false;
+  }
+  pushHistory();
+  state.circleTangent = { point: picked, original: q, kind, tangentPoints, lines };
+  state.tangentPicking = false;
+  updateTangentUI(); renderAnalysis(); draw(); saveSoon();
+  toast(kind === 'on' ? '已过圆上一点作切线。' : '已过圆外一点作两条切线。', 'ok');
+  return true;
+}
+
+function drawCircleTangent() {
+  const c = state.curve, t = state.circleTangent;
+  if (!c || c.kind !== 'circle' || !t || !Array.isArray(t.lines) || !t.lines.length) return;
+  const center = { x: c.h, y: c.k };
+  for (const line of t.lines) {
+    drawLineWorld(line.p1, line.p2, '#e11d48', 1.7, [7, 5]);
+  }
+  for (const T of (t.tangentPoints || [])) {
+    drawPolyline([w2s(center), w2s(T)], 'rgba(225,29,72,.42)', 1.1, null, [3, 4]);
+  }
+  t.tangentPoints.forEach((T, i) => {
+    const p = w2s(T);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3.6, 0, TAU);
+    ctx.fillStyle = '#e11d48'; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.restore();
+    chip(t.kind === 'on' ? 'T' : (i === 0 ? 'T₁' : 'T₂'), p.x + 9, p.y - 10, '#be123c', 'rgba(255,247,249,.95)');
+  });
+  if (t.kind === 'external') {
+    const p = w2s(t.original);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, TAU);
+    ctx.fillStyle = '#9f1239'; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.restore();
+    chip('P', p.x + 9, p.y - 10, '#9f1239', 'rgba(255,247,249,.95)');
+  }
+}
+
+function updateTangentUI() {
+  const wrap = $('#circleTools');
+  if (wrap) wrap.hidden = state.conicType !== 'circle';
+  const pick = $('#tangentPick');
+  if (pick) {
+    pick.classList.toggle('active', !!state.tangentPicking);
+    pick.textContent = state.tangentPicking ? '点击画布选择一点…（再次点击取消）' : '在画布上选一点作切线';
+  }
+  const res = $('#tangentResult');
+  if (!res) return;
+  const c = state.curve;
+  if (!c || c.kind !== 'circle') {
+    res.innerHTML = '先生成圆，再选择圆上一点或圆外一点。';
+    return;
+  }
+  const t = state.circleTangent;
+  if (!t || !t.lines || !t.lines.length) {
+    res.innerHTML = '在圆上取一点得到 <b>一条切线</b>；在圆外取一点得到 <b>两条切线</b>。';
+    return;
+  }
+  const eqs = t.lines.map(line => `<div><b>${line.label || '切线'}</b>：${escMath(line.equation)}</div>`).join('');
+  if (t.kind === 'on') {
+    res.innerHTML = `<div class="tangent-eq"><b>切点</b> T(${fmt(t.point.x, 3)}, ${fmt(t.point.y, 3)})<div>${eqs}</div><div class="small">半径 OT ⊥ 切线</div></div>`;
+  } else {
+    const dx = t.original.x - c.h, dy = t.original.y - c.k;
+    const len = Math.sqrt(Math.max(0, dx * dx + dy * dy - c.r * c.r));
+    res.innerHTML = `<div class="tangent-eq"><b>圆外点</b> P(${fmt(t.original.x, 3)}, ${fmt(t.original.y, 3)})<div>${eqs}</div><div class="small">切线长 = ${fmt(len, 3)}</div></div>`;
   }
 }
 
@@ -4051,7 +4313,8 @@ function deleteObject(kind, id) {
     if (!state.curve) return;
     pushHistory();
     state.curve = null; state.conicResult = null;
-    renderObjectList(); renderAnalysis(); draw(); saveSoon();
+    state.circleTangent = null; state.tangentPicking = false;
+    updateTangentUI(); renderObjectList(); renderAnalysis(); draw(); saveSoon();
     return;
   }
   if (kind === 'space') { pushHistory(); removeSpacePoint(id, false); return; }
@@ -4111,6 +4374,10 @@ function onPointerDown(e) {
   canvas.setPointerCapture(e.pointerId);
   if (state.mode === 'space') {
     state.drag = { type: 'orbit', sx: sp.x, sy: sp.y, yaw: state.space.yaw, pitch: state.space.pitch, moved: false };
+    return;
+  }
+  if (state.tangentPicking) {
+    state.drag = { type: 'tangent-pick', sx: sp.x, sy: sp.y, moved: false };
     return;
   }
   if (state.tool === 'select') {
@@ -4175,6 +4442,7 @@ function onPointerMove(e) {
   updateCoords(sp);
   if (!state.drag) {
     if (state.mode === 'space') return;
+    if (state.tangentPicking) { canvas.style.cursor = 'crosshair'; return; }
     const hover = state.tool === 'select' ? (hitTestPoint(sp, 12) ? { kind: 'point', id: hitTestPoint(sp, 12).id } : (hitTestShape(sp) ? { kind: 'shape', id: hitTestShape(sp).id } : null))
       : state.tool === 'congruent' || state.tool === 'similar' ? (() => { const t = triangleAt(sp); return t ? { kind: 'shape', id: t.id } : null; })()
       : null;
@@ -4188,6 +4456,10 @@ function onPointerMove(e) {
     return;
   }
   const d = state.drag;
+  if (d.type === 'tangent-pick') {
+    if (Math.hypot(sp.x - d.sx, sp.y - d.sy) > 2) d.moved = true;
+    return;
+  }
   if (d.type === 'orbit') {
     state.space.yaw = d.yaw - (sp.x - d.sx) * .008;
     state.space.pitch = clamp(d.pitch + (sp.y - d.sy) * .006, -.05, 1.25);
@@ -4314,6 +4586,13 @@ function onPointerUp(e) {
   const d = state.drag;
   state.drag = null;
   if (!d) return;
+  if (d.type === 'tangent-pick') {
+    if (!d.moved) computeCircleTangent(s2w(sp));
+    state.tangentPicking = false;
+    canvas.style.cursor = 'grab';
+    updateTangentUI(); saveSoon(); draw();
+    return;
+  }
   if (d.type === 'pan' && !d.moved) {
     state.selected = null; renderAllPanels(); draw();
   }
@@ -4861,6 +5140,7 @@ function saveState() {
       conicResult: state.conicResult,
       conicType: state.conicType,
       conicParams: state.conicParams,
+      circleTangent: state.circleTangent,
       calc: state.calc,
       rotateExpr: state.rotateExpr,
       keepOriginal: state.keepOriginal,
@@ -4906,6 +5186,7 @@ function restoreState() {
     state.activeFnId = fns.some(f => f.id === data.activeFnId) ? data.activeFnId : (fns[0] ? fns[0].id : null);
     if (data.curve && data.curve.kind) state.curve = data.curve;
     if (data.conicResult && data.conicResult.kind) state.conicResult = data.conicResult;
+    if (data.circleTangent && Array.isArray(data.circleTangent.lines)) state.circleTangent = data.circleTangent;
     if (data.calc && typeof data.calc === 'object') state.calc = data.calc;
     if (typeof data.rotateExpr === 'string' && data.rotateExpr.trim()) state.rotateExpr = data.rotateExpr;
     if (typeof data.keepOriginal === 'boolean') state.keepOriginal = data.keepOriginal;
@@ -4969,9 +5250,6 @@ function bindUI() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', () => { draw(); saveSoon(); });
   });
-  const anti = $('#showAntiderivative');
-  if (anti) anti.addEventListener('change', () => { renderAnalysis(); saveSoon(); });
-
   $$('.conic-type').forEach(b => b.addEventListener('click', () => {
     state.conicType = b.dataset.conic;
     $$('.conic-type').forEach(x => x.classList.toggle('active', x.dataset.conic === state.conicType));
@@ -4979,6 +5257,34 @@ function bindUI() {
     saveSoon();
   }));
   $('#conicBtn').addEventListener('click', generateConic);
+  $('#circleEqBtn').addEventListener('click', () => {
+    const input = $('#circleEqInput');
+    if (input) applyCircleEquation(input.value);
+  });
+  $('#circleEqInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyCircleEquation(e.target.value);
+    }
+  });
+  $('#tangentDraw').addEventListener('click', () => {
+    const x = parseFloat($('#tangentX').value), y = parseFloat($('#tangentY').value);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) { toast('请输入有效的切点坐标', 'warn'); return; }
+    computeCircleTangent({ x, y });
+  });
+  $('#tangentPick').addEventListener('click', () => {
+    if (!state.curve || state.curve.kind !== 'circle') { toast('请先生成一个圆', 'warn'); return; }
+    state.tangentPicking = !state.tangentPicking;
+    if (state.tangentPicking) {
+      if (state.mode === 'space') setMode('plane');
+      if (state.tab !== 'conic') setTab('conic');
+      canvas.style.cursor = 'crosshair';
+      toast('在画布上点击圆上一点或圆外一点。', '');
+    } else {
+      canvas.style.cursor = 'grab';
+    }
+    updateTangentUI(); draw();
+  });
 
   $$('.tool').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
   $('#rotateExpr').addEventListener('input', e => {
@@ -5153,7 +5459,14 @@ function bindUI() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
       e.preventDefault(); redo(); return;
     }
-    if (e.key === 'Escape') { cancelPending(); return; }
+    if (e.key === 'Escape') {
+      if (state.tangentPicking) {
+        state.tangentPicking = false;
+        updateTangentUI(); draw(); saveSoon();
+        return;
+      }
+      cancelPending(); return;
+    }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (state.mode !== 'space' && state.tab === 'geometry' && state.selected) {
         e.preventDefault(); deleteSelected();
