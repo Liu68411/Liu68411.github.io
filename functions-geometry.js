@@ -348,12 +348,16 @@ function simplify(n) {
         if (av !== null && bv !== null) return num(av * bv);
         if (av === -1) return simplify({ t: 'un', op: '-', a: b });
         if (bv === -1) return simplify({ t: 'un', op: '-', a });
-        // 2 · (x²/2) → x²
+        // 2 · (x²/2) → x²；系数不是整数时保留分数形式 3x²/2
         if (av !== null && b.t === 'bin' && b.op === '/' && isNum(b.r) && b.r.v !== 0) {
-          return simplify({ t: 'bin', op: '*', l: num(av / b.r.v), r: b.l });
+          const coef = av / b.r.v;
+          if (Number.isInteger(coef)) return simplify({ t: 'bin', op: '*', l: num(coef), r: b.l });
+          return simplify({ t: 'bin', op: '/', l: { t: 'bin', op: '*', l: num(av), r: b.l }, r: b.r });
         }
         if (bv !== null && a.t === 'bin' && a.op === '/' && isNum(a.r) && a.r.v !== 0) {
-          return simplify({ t: 'bin', op: '*', l: num(bv / a.r.v), r: a.l });
+          const coef = bv / a.r.v;
+          if (Number.isInteger(coef)) return simplify({ t: 'bin', op: '*', l: num(coef), r: a.l });
+          return simplify({ t: 'bin', op: '/', l: { t: 'bin', op: '*', l: num(bv), r: a.l }, r: a.r });
         }
         // 把数字放到左边
         if (bv !== null && av === null) return { t: 'bin', op: '*', l: b, r: a };
@@ -367,7 +371,7 @@ function simplify(n) {
         }
         if (bv !== null && bv !== 0 && a.t === 'bin' && a.op === '*' && isNum(a.l)) {
           const coef = a.l.v / bv;
-          return simplify({ t: 'bin', op: '*', l: num(coef), r: a.r });
+          if (Number.isInteger(coef)) return simplify({ t: 'bin', op: '*', l: num(coef), r: a.r });
         }
         return { t: 'bin', op: '/', l: a, r: b };
       case '^':
