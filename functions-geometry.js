@@ -1726,6 +1726,63 @@ function applyApexFromUI(value) {
   applyApexAngle(value === undefined ? (input ? parseFloat(input.value) : NaN) : value);
 }
 
+function quadAngleEditorHTML(s) {
+  if (!s || s.type !== 'quad' || !['parallelogram', 'rhombus'].includes(s.kind)) return '';
+  const pts = shapePoints(s);
+  if (pts.length < 4) return '';
+  const angle = deg(angleAt(pts[0], pts[1], pts[3]));
+  return `<div class="apex-editor quad-editor">
+    <div class="apex-editor-head"><b>编辑内角</b><span>∠${esc(pts[0].label)} · ${s.kind === 'rhombus' ? '四边等长' : '边长不变'}</span></div>
+    <div class="apex-input-row">
+      <input id="quadAngleInput" type="number" min="5" max="175" step="0.1" value="${fmt(angle, 2)}" aria-label="平行四边形或菱形内角">
+      <span class="deg">°</span>
+      <button class="btn" id="applyQuadAngle">应用</button>
+    </div>
+    <div class="angle-chips">
+      <button class="angle-chip" data-quad-angle="45">45°</button>
+      <button class="angle-chip" data-quad-angle="60">60°</button>
+      <button class="angle-chip" data-quad-angle="75">75°</button>
+      <button class="angle-chip" data-quad-angle="120">120°</button>
+      <button class="angle-chip" data-quad-angle="135">135°</button>
+    </div>
+    <div class="apex-hint">∠${esc(pts[1].label)} = ∠${esc(pts[3].label)} = 180° − θ，对边保持平行${s.kind === 'rhombus' ? '，四条边仍然相等' : '，边长不变'}。</div>
+  </div>`;
+}
+
+function applyQuadAngle(value) {
+  const sel = state.selected;
+  if (!sel || sel.kind !== 'shape') { toast('请先选中一个平行四边形或菱形', 'warn'); return; }
+  const s = getShape(sel.id);
+  if (!s || s.type !== 'quad' || !['parallelogram', 'rhombus'].includes(s.kind)) {
+    toast('选中的图形不是可编辑内角的平行四边形或菱形', 'warn');
+    return;
+  }
+  const pts = shapePoints(s);
+  if (pts.length < 4) return;
+  const angle = Number(value);
+  if (!Number.isFinite(angle)) { toast('请输入有效的角度', 'warn'); return; }
+  if (angle < 5 || angle > 175) { toast('内角需要在 5° 到 175° 之间', 'warn'); return; }
+  const A = pts[0], B = pts[1], C = pts[2], D = pts[3];
+  const sideAB = dist(A, B);
+  const sideAD = s.kind === 'rhombus' ? sideAB : dist(A, D);
+  if (sideAB < 1e-6 || sideAD < 1e-6) { toast('边长太短，无法设置角度', 'warn'); return; }
+  const dir = norm(sub(B, A));
+  const sign = cross(sub(B, A), sub(D, A)) < 0 ? -1 : 1;
+  const newAD = mul(rotate(dir, sign * rad(angle)), sideAD);
+  const newD = { x: A.x + newAD.x, y: A.y + newAD.y };
+  pushHistory();
+  D.x = newD.x; D.y = newD.y;
+  C.x = B.x + newAD.x; C.y = B.y + newAD.y;
+  syncDerivedPoints();
+  renderAllPanels(); draw(); saveSoon();
+  toast(`已把 ${s.kind === 'rhombus' ? '菱形' : '平行四边形'}的内角设为 ${fmt(angle, 2)}°`, 'ok');
+}
+
+function applyQuadFromUI(value) {
+  const input = $('#quadAngleInput');
+  applyQuadAngle(value === undefined ? (input ? parseFloat(input.value) : NaN) : value);
+}
+
 function quadMetrics(shape) {
   const p = shapePoints(shape);
   if (p.length < 4) return null;
@@ -3269,7 +3326,9 @@ function shapeDetailHTML(s) {
       <div class="measure-row"><span>四个角</span><b>${m.angles.map(v => fmt(v, 1) + '°').join(' / ')}</b></div>
       <div class="measure-row"><span>对角线</span><b>${fmt(diag1, 3)} / ${fmt(diag2, 3)}</b></div>
       <div class="measure-row"><span>周长</span><b>${fmt(m.perimeter, 3)}</b></div>
-      <div class="measure-row"><span>面积</span><b>${fmt(m.area, 3)}</b></div>`;
+      <div class="measure-row"><span>面积</span><b>${fmt(m.area, 3)}</b></div>
+      ${CONSTRAINED_QUAD_KINDS.includes(s.kind) ? '<div class="mark-note">拖动任一顶点时，以对角顶点为位似中心等比缩放，形状保持不变。</div>' : ''}
+      ${quadAngleEditorHTML(s)}`;
   }
   if (s.type === 'circle') {
     const p = shapePoints(s);
@@ -3884,6 +3943,7 @@ function toggleVisibility(kind, id) {
 /* ---------- 指针事件 ---------- */
 
 const CONSTRAINED_TRIANGLE_KINDS = ['isosceles-triangle', 'right-isosceles', 'equilateral'];
+const CONSTRAINED_QUAD_KINDS = ['square', 'rectangle', 'parallelogram', 'rhombus'];
 
 function constrainedTriangleForPoint(pointId) {
   const sel = state.selected;
@@ -3893,6 +3953,17 @@ function constrainedTriangleForPoint(pointId) {
   }
   const candidates = state.geom.shapes.filter(s => s.visible && s.type === 'triangle'
     && CONSTRAINED_TRIANGLE_KINDS.includes(s.kind) && s.points.includes(pointId));
+  return candidates.length ? candidates[candidates.length - 1] : null;
+}
+
+function constrainedQuadForPoint(pointId) {
+  const sel = state.selected;
+  if (sel && sel.kind === 'shape') {
+    const s = getShape(sel.id);
+    if (s && s.type === 'quad' && CONSTRAINED_QUAD_KINDS.includes(s.kind) && s.points.includes(pointId)) return s;
+  }
+  const candidates = state.geom.shapes.filter(s => s.visible && s.type === 'quad'
+    && CONSTRAINED_QUAD_KINDS.includes(s.kind) && s.points.includes(pointId));
   return candidates.length ? candidates[candidates.length - 1] : null;
 }
 
@@ -3907,15 +3978,27 @@ function onPointerDown(e) {
   if (state.tool === 'select') {
     const p = hitTestPoint(sp, 12);
     if (p) {
+      const prevSel = state.selected;
       const ct = p.derived ? null : constrainedTriangleForPoint(p.id);
+      const cq = p.derived ? null : constrainedQuadForPoint(p.id);
+      const preferQuad = !!(cq && prevSel && prevSel.kind === 'shape' && prevSel.id === cq.id);
       state.selected = { kind: 'point', id: p.id };
-      if (ct) {
+      if (ct && !preferQuad) {
         const pts = shapePoints(ct);
         const others = pts.filter(q => q.id !== p.id);
         const anchor = mid(others[0], others[1]);
         state.drag = {
           type: 'constrained', shapeId: ct.id, pointId: p.id, sx: sp.x, sy: sp.y,
           anchor, orig: pts.map(q => ({ id: q.id, x: q.x, y: q.y })), moved: false, pushed: false
+        };
+      } else if (cq) {
+        const pts = shapePoints(cq);
+        const idx = cq.points.indexOf(p.id);
+        const anchorPt = pts[(idx + 2) % 4];
+        state.drag = {
+          type: 'constrained-quad', shapeId: cq.id, pointId: p.id, sx: sp.x, sy: sp.y,
+          anchor: { x: anchorPt.x, y: anchorPt.y },
+          orig: pts.map(q => ({ id: q.id, x: q.x, y: q.y })), moved: false, pushed: false
         };
       } else {
         state.drag = p.derived
@@ -4013,6 +4096,37 @@ function onPointerMove(e) {
     renderSelection(); draw(); saveSoon();
     return;
   }
+  if (d.type === 'constrained-quad') {
+    if (!d.moved && Math.hypot(sp.x - d.sx, sp.y - d.sy) > 2) {
+      d.moved = true;
+      if (!d.pushed) { pushHistory(); d.pushed = true; }
+    }
+    if (!d.moved) return;
+    const shape = getShape(d.shapeId);
+    const dragged = getPt(d.pointId);
+    if (!shape || !dragged) return;
+    let target = snapWorld(sp, e.altKey);
+    if (target.pid === d.pointId) {
+      const w = s2w(sp); target = { x: w.x, y: w.y, pid: null };
+    }
+    const oldPoint = d.orig.find(q => q.id === d.pointId);
+    if (!oldPoint) return;
+    const oldLen = Math.hypot(oldPoint.x - d.anchor.x, oldPoint.y - d.anchor.y);
+    const newLen = Math.hypot(target.x - d.anchor.x, target.y - d.anchor.y);
+    if (oldLen < 1e-6 || !Number.isFinite(newLen)) return;
+    // 以对角顶点为位似中心：正方形/矩形/平行四边形/菱形保持形状，只改变大小
+    const k = clamp(newLen / oldLen, 0.1, 20);
+    for (const q of d.orig) {
+      const p = getPt(q.id);
+      if (!p) continue;
+      p.x = d.anchor.x + (q.x - d.anchor.x) * k;
+      p.y = d.anchor.y + (q.y - d.anchor.y) * k;
+    }
+    state.selected = { kind: 'shape', id: d.shapeId };
+    state.preview = null;
+    renderSelection(); draw(); saveSoon();
+    return;
+  }
   if (d.type === 'point') {
     const p = getPt(d.id);
     if (!p) return;
@@ -4068,8 +4182,8 @@ function onPointerUp(e) {
   if (d.type === 'click' && !d.moved) {
     handleToolClick(sp);
   }
-  if (d.type === 'orbit' || d.type === 'pan' || d.type === 'point' || d.type === 'shape' || d.type === 'constrained') saveSoon();
-  if (d.type === 'point' || d.type === 'shape' || d.type === 'constrained') updateTransformUI();
+  if (['orbit', 'pan', 'point', 'shape', 'constrained', 'constrained-quad'].includes(d.type)) saveSoon();
+  if (['point', 'shape', 'constrained', 'constrained-quad'].includes(d.type)) updateTransformUI();
   updateToolbarVisibility();
   draw();
 }
@@ -4785,12 +4899,19 @@ function bindUI() {
   $('#selectionBox').addEventListener('click', e => {
     const preset = e.target.closest('[data-apex-angle]');
     if (preset) { applyApexFromUI(parseFloat(preset.dataset.apexAngle)); return; }
-    if (e.target.closest('#applyApex')) applyApexFromUI();
+    if (e.target.closest('#applyApex')) { applyApexFromUI(); return; }
+    const qpreset = e.target.closest('[data-quad-angle]');
+    if (qpreset) { applyQuadFromUI(parseFloat(qpreset.dataset.quadAngle)); return; }
+    if (e.target.closest('#applyQuadAngle')) applyQuadFromUI();
   });
   $('#selectionBox').addEventListener('keydown', e => {
-    if (e.target && e.target.id === 'apexAngleInput' && e.key === 'Enter') {
+    if (!e.target) return;
+    if (e.target.id === 'apexAngleInput' && e.key === 'Enter') {
       e.preventDefault();
       applyApexFromUI();
+    } else if (e.target.id === 'quadAngleInput' && e.key === 'Enter') {
+      e.preventDefault();
+      applyQuadFromUI();
     }
   });
 
