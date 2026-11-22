@@ -2851,6 +2851,8 @@ function updateTransformUI() {
   $$('.angle-chip').forEach(b => b.classList.toggle('active', b.dataset.angle === state.rotateExpr));
 }
 
+const PERMS = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+
 function matchTriangles(A, B, mode) {
   const ma = triangleMetrics(A), mb = triangleMetrics(B);
   if (!ma || !mb) return null;
