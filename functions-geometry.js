@@ -1590,7 +1590,7 @@ function updateGraphHover(sp) {
         const yy = evalNode(best.fn.ast, nearRoot);
         if (Number.isFinite(yy) && Math.abs(yy) < 1e-4) {
           x = nearRoot; y = yy;
-          ex = exactNumber(nearRoot, 1e-6, 5);
+          ex = { value: nearRoot, text: functionRootText(best.fn, nearRoot) };
         }
       }
     }
@@ -3780,7 +3780,7 @@ function functionKeyPoints(fn) {
   const degree = coeffs ? coeffs.length - 1 : -1;
   const trig = containsTrig(fn.ast);
   const points = [];
-  const add = (x, y, label, kind, color, priority = 2) => {
+  const add = (x, y, label, kind, color, priority = 2, xTextOverride = null) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     if (x < lo - 1e-9 || x > hi + 1e-9 || y < yLo - 1e-9 || y > yHi + 1e-9) return;
     const existing = points.find(p => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6);
@@ -3790,12 +3790,12 @@ function functionKeyPoints(fn) {
       }
       return;
     }
-    points.push({ x, y, label, kind, color, priority, xText: exactText(x, 5), yText: exactText(y, 5) });
+    points.push({ x, y, label, kind, color, priority, xText: xTextOverride || exactText(x, 5), yText: exactText(y, 5) });
   };
   let roots = [];
   if (coeffs && degree >= 1) roots = polynomialRoots(coeffs).real;
   else roots = numericFunctionRoots(fn);
-  roots.slice(0, 6).forEach((r, i) => add(r, 0, `x${subscript(i + 1)}`, 'root', '#b45309', 2));
+  roots.slice(0, 6).forEach((r, i) => add(r, 0, `x${subscript(i + 1)}`, 'root', '#b45309', 2, functionRootText(fn, r)));
   if (lo <= 0 && hi >= 0) {
     const y0 = evalNode(fn.ast, 0);
     if (Number.isFinite(y0)) add(0, y0, 'y 轴交点', 'yint', '#2563eb', 1);
@@ -3841,6 +3841,109 @@ function drawFunctionKeyPoints() {
   }
 }
 
+function gcdNumber(a, b) {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b) { const t = a % b; a = b; b = t; }
+  return a || 1;
+}
+function toFraction(value) {
+  if (!Number.isFinite(value)) return null;
+  if (Math.abs(value) < 1e-12) return { n: 0, d: 1 };
+  const sign = value < 0 ? -1 : 1;
+  const av = Math.abs(value);
+  for (let d = 1; d <= 200; d++) {
+    const n = Math.round(av * d);
+    if (Math.abs(av - n / d) < 1e-9 * Math.max(1, av)) {
+      const g = gcdNumber(n, d);
+      return { n: sign * n / g, d: d / g };
+    }
+  }
+  return null;
+}
+function fracNorm(n, d) {
+  if (d < 0) { n = -n; d = -d; }
+  const g = gcdNumber(n, d);
+  return { n: n / g, d: d / g };
+}
+function fracAdd(a, b) { return fracNorm(a.n * b.d + b.n * a.d, a.d * b.d); }
+function fracSub(a, b) { return fracNorm(a.n * b.d - b.n * a.d, a.d * b.d); }
+function fracMul(a, b) { return fracNorm(a.n * b.n, a.d * b.d); }
+function fracDiv(a, b) { return b.n === 0 ? null : fracNorm(a.n * b.d, a.d * b.n); }
+function fracNeg(a) { return { n: -a.n, d: a.d }; }
+function fracText(a) {
+  if (!a) return '—';
+  if (a.d === 1) return a.n < 0 ? `−${-a.n}` : String(a.n);
+  return `${a.n < 0 ? '−' : ''}${Math.abs(a.n)}/${a.d}`;
+}
+function fracValue(a) { return a.n / a.d; }
+function squareFreePart(n) {
+  n = Math.abs(Math.round(n));
+  if (!n) return { s: 0, q: 1 };
+  let s = 1, q = n;
+  for (let p = 2; p * p <= q; p++) {
+    while (q % (p * p) === 0) { s *= p; q /= p * p; }
+  }
+  return { s, q };
+}
+function quadraticRootTexts(coeffs) {
+  if (!coeffs || coeffs.length !== 3) return null;
+  const a = toFraction(coeffs[2]), b = toFraction(coeffs[1]), c = toFraction(coeffs[0]);
+  if (!a || !b || !c || a.n === 0) return null;
+  const disc = fracSub(fracMul(b, b), fracMul({ n: 4, d: 1 }, fracMul(a, c)));
+  if (disc.n < 0) return null;
+  if (disc.n === 0) {
+    const r = fracDiv(fracNeg(b), fracMul({ n: 2, d: 1 }, a));
+    if (!r) return null;
+    return [{ value: fracValue(r), text: fracText(r) }];
+  }
+  const twoA = fracMul({ n: 2, d: 1 }, a);
+  const sqrtDen = disc.d;
+  const { s, q } = squareFreePart(disc.n * sqrtDen);
+  if (q === 1) {
+    const sd = { n: s, d: sqrtDen };
+    const r1 = fracDiv(fracSub(fracNeg(b), sd), twoA);
+    const r2 = fracDiv(fracAdd(fracNeg(b), sd), twoA);
+    if (!r1 || !r2) return null;
+    return [r1, r2].sort((x, y) => fracValue(x) - fracValue(y)).map(f => ({ value: fracValue(f), text: fracText(f) }));
+  }
+  let num0 = fracMul(fracNeg(b), { n: sqrtDen, d: 1 });
+  let den = fracMul(twoA, { n: sqrtDen, d: 1 });
+  let sCoeff = s;
+  if (num0.d === 1 && den.d === 1) {
+    const g = gcdNumber(gcdNumber(num0.n, sCoeff), den.n);
+    num0 = { n: num0.n / g, d: 1 };
+    sCoeff /= g;
+    den = { n: den.n / g, d: 1 };
+  }
+  const base = num0.n === 0 ? '' : fracText(num0);
+  const rad = `${sCoeff === 1 ? '' : sCoeff}√${q}`;
+  const make = (minus) => {
+    const expr = base
+      ? `${base} ${minus ? '−' : '+'} ${rad}`
+      : `${minus ? '−' : ''}${rad}`;
+    return den.d === 1 && den.n === 1 ? expr : `(${expr})/${fracText(den)}`;
+  };
+  const value1 = (-b.n / b.d - Math.sqrt(disc.n / disc.d)) / (2 * a.n / a.d);
+  const value2 = (-b.n / b.d + Math.sqrt(disc.n / disc.d)) / (2 * a.n / a.d);
+  return [
+    { value: value1, text: make(true) },
+    { value: value2, text: make(false) }
+  ].sort((x, y) => x.value - y.value);
+}
+function functionRootText(fn, x) {
+  if (fn) {
+    const coeffs = polyFromAst(fn.ast);
+    if (coeffs && trimPoly(coeffs).length === 3) {
+      const q = quadraticRootTexts(trimPoly(coeffs));
+      if (q && q.length) {
+        const nearest = q.reduce((a, b) => Math.abs(b.value - x) < Math.abs(a.value - x) ? b : a, q[0]);
+        if (Math.abs(nearest.value - x) < 1e-6) return nearest.text;
+      }
+    }
+  }
+  return exactText(x, 5);
+}
+
 function equationAnalysisHTML(fn) {
   const poly = polyFromAst(fn.ast);
   const coeffs = poly ? trimPoly(poly) : null;
@@ -3859,7 +3962,11 @@ function equationAnalysisHTML(fn) {
   }
   if (coeffs) html += `<div class="sel-sub">${degree} 次多项式 · 实根与韦达定理</div>`;
   else html += `<div class="sel-sub">非多项式 · 当前视图内的数值根</div>`;
-  if (roots.length) {
+  const exactQuadratic = coeffs && degree === 2 ? quadraticRootTexts(coeffs) : null;
+  if (exactQuadratic && exactQuadratic.length) {
+    const shown = exactQuadratic.map((r, i) => `x${subscript(i + 1)} = ${r.text}`).join('，');
+    html += `<div class="math-line">${shown}</div>`;
+  } else if (roots.length) {
     const shown = roots.slice(0, 6).map((r, i) => `x${subscript(i + 1)} = ${exactText(r, 5)}`).join('，');
     html += `<div class="math-line">${shown}${roots.length > 6 ? ' …' : ''}</div>`;
   } else if (complex) {
