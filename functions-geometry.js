@@ -49,6 +49,7 @@ const state = {
   tangentPicking: false,
   analysisMode: 'function',
   calc: null,
+  showKeyPoints: true,
   rotateExpr: '180 - 2α',
   keepOriginal: true,
   geom: {
@@ -1004,7 +1005,7 @@ function draw() {
     ctx.fillStyle = '#fffdf8';
     ctx.fillRect(0, 0, W, H);
     if (state.mode === 'plane') drawGrid();
-    if (state.tab === 'function') drawFunctions();
+    if (state.tab === 'function') { drawFunctions(); drawFunctionKeyPoints(); }
     if (state.tab === 'conic' && state.curve && state.curve.visible !== false) {
       drawConic(state.curve);
       drawCircleTangent();
@@ -2119,6 +2120,7 @@ function captureSnapshot() {
     conicParams: cloneData(state.conicParams),
     circleTangent: cloneData(state.circleTangent),
     calc: cloneData(state.calc),
+    showKeyPoints: state.showKeyPoints !== false,
     rotateExpr: state.rotateExpr,
     keepOriginal: state.keepOriginal,
     geom: cloneData(state.geom),
@@ -2146,6 +2148,7 @@ function applySnapshot(snap) {
     if (s.conicType) state.conicType = s.conicType;
     if (s.conicParams) state.conicParams = Object.assign(cloneData(state.conicParams), cloneData(s.conicParams));
     state.calc = cloneData(s.calc) || null;
+    state.showKeyPoints = s.showKeyPoints !== false;
     state.rotateExpr = typeof s.rotateExpr === 'string' ? s.rotateExpr : state.rotateExpr;
     state.keepOriginal = typeof s.keepOriginal === 'boolean' ? s.keepOriginal : true;
     if (s.geom) {
@@ -3719,6 +3722,116 @@ function numericFunctionRoots(fn) {
   }
   return out.slice(0, 8);
 }
+const keyPointCache = new Map();
+
+function containsTrig(n) {
+  if (!n) return false;
+  if (n.t === 'call') return ['sin', 'cos', 'tan'].includes(n.name) || (n.args || []).some(containsTrig);
+  if (n.t === 'un') return containsTrig(n.a);
+  if (n.t === 'bin') return containsTrig(n.l) || containsTrig(n.r);
+  return false;
+}
+
+function numericExtrema(fn, lo, hi) {
+  const f = x => evalNode(fn.ast, x);
+  const d = x => numericDerivative(f, x);
+  const out = [];
+  const N = 1400;
+  let px = lo, pd = d(px);
+  for (let i = 1; i <= N; i++) {
+    const x = lo + (hi - lo) * i / N;
+    const dx = d(x);
+    if (Number.isFinite(pd) && Number.isFinite(dx) && (pd < 0) !== (dx < 0)) {
+      let aa = px, bb = x, fa = pd;
+      for (let j = 0; j < 70; j++) {
+        const m = (aa + bb) / 2, fm = d(m);
+        if (!Number.isFinite(fm)) break;
+        if (Math.abs(fm) < 1e-10) { aa = bb = m; break; }
+        if ((fa < 0) !== (fm < 0)) bb = m; else { aa = m; fa = fm; }
+      }
+      const r = (aa + bb) / 2;
+      const y = f(r);
+      if (Number.isFinite(y) && Math.abs(y) < 1e6) out.push({ x: r, max: pd > 0 });
+    }
+    px = x; pd = dx;
+  }
+  return out;
+}
+
+function functionKeyPoints(fn) {
+  if (!fn) return [];
+  const a = s2w({ x: 0, y: 0 }).x, b = s2w({ x: W, y: 0 }).x;
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  const yBottom = s2w({ x: 0, y: H }).y, yTop = s2w({ x: 0, y: 0 }).y;
+  const yLo = Math.min(yBottom, yTop), yHi = Math.max(yBottom, yTop);
+  const key = `${fn.id}|${fn.expr}|${Math.round(lo * 100)}|${Math.round(hi * 100)}|${Math.round(yLo * 100)}|${Math.round(yHi * 100)}`;
+  if (keyPointCache.has(key)) return keyPointCache.get(key);
+  const poly = polyFromAst(fn.ast);
+  const coeffs = poly ? trimPoly(poly) : null;
+  const degree = coeffs ? coeffs.length - 1 : -1;
+  const trig = containsTrig(fn.ast);
+  const points = [];
+  const add = (x, y, label, kind, color, priority = 2) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (x < lo - 1e-9 || x > hi + 1e-9 || y < yLo - 1e-9 || y > yHi + 1e-9) return;
+    const existing = points.find(p => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6);
+    if (existing) {
+      if (priority > existing.priority) {
+        existing.label = label; existing.kind = kind; existing.color = color; existing.priority = priority;
+      }
+      return;
+    }
+    points.push({ x, y, label, kind, color, priority, xText: exactText(x, 5), yText: exactText(y, 5) });
+  };
+  let roots = [];
+  if (coeffs && degree >= 1) roots = polynomialRoots(coeffs).real;
+  else roots = numericFunctionRoots(fn);
+  roots.slice(0, 6).forEach((r, i) => add(r, 0, `x${subscript(i + 1)}`, 'root', '#b45309', 2));
+  if (lo <= 0 && hi >= 0) {
+    const y0 = evalNode(fn.ast, 0);
+    if (Number.isFinite(y0)) add(0, y0, 'y 轴交点', 'yint', '#2563eb', 1);
+  }
+  if (coeffs && degree >= 2) {
+    const dc = [];
+    for (let i = 1; i <= degree; i++) dc.push(coeffs[i] * i);
+    const extrema = polynomialRoots(dc).real;
+    for (const x of extrema) {
+      const y = polyEval(coeffs, x);
+      let d2 = 0;
+      for (let i = 1; i < dc.length; i++) d2 += i * dc[i] * Math.pow(x, i - 1);
+      const max = d2 < 0;
+      add(x, y, degree === 2 ? '顶点' : (max ? '极大' : '极小'), max ? 'max' : 'min', max ? '#7c3aed' : '#be123c', 3);
+    }
+  } else if (!coeffs) {
+    for (const e of numericExtrema(fn, lo, hi).slice(0, 6)) {
+      const label = trig ? (e.max ? '波峰' : '波谷') : (e.max ? '极大' : '极小');
+      add(e.x, evalNode(fn.ast, e.x), label, e.max ? 'max' : 'min', e.max ? '#7c3aed' : '#be123c', 3);
+    }
+  }
+  const result = points.slice(0, 10);
+  keyPointCache.set(key, result);
+  return result;
+}
+
+function drawFunctionKeyPoints() {
+  if (state.showKeyPoints === false || state.tab !== 'function') return;
+  const fn = activeFn();
+  if (!fn || !fn.visible) return;
+  for (const p of functionKeyPoints(fn)) {
+    const s = w2s(p);
+    if (s.x < -20 || s.x > W + 20 || s.y < -20 || s.y > H + 20) continue;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(s.x, s.y, 3.6, 0, TAU);
+    ctx.fillStyle = p.color; ctx.fill();
+    ctx.strokeStyle = '#fffdf8'; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.restore();
+    const pair = `(${p.xText}, ${p.yText})`;
+    const text = `${p.label} ${pair}`;
+    const align = s.x > W - 220 ? 'right' : 'left';
+    chip(text, align === 'right' ? s.x - 8 : s.x + 8, s.y - 12, p.color, 'rgba(255,253,249,.96)', align);
+  }
+}
+
 function equationAnalysisHTML(fn) {
   const poly = polyFromAst(fn.ast);
   const coeffs = poly ? trimPoly(poly) : null;
@@ -5752,6 +5865,7 @@ function saveState() {
       conicParams: state.conicParams,
       circleTangent: state.circleTangent,
       calc: state.calc,
+      showKeyPoints: state.showKeyPoints !== false,
       rotateExpr: state.rotateExpr,
       keepOriginal: state.keepOriginal,
       geom: state.geom,
@@ -5798,6 +5912,7 @@ function restoreState() {
     if (data.conicResult && data.conicResult.kind) state.conicResult = data.conicResult;
     if (data.circleTangent && Array.isArray(data.circleTangent.lines)) state.circleTangent = data.circleTangent;
     if (data.calc && typeof data.calc === 'object') state.calc = data.calc;
+    state.showKeyPoints = data.showKeyPoints !== false;
     if (typeof data.rotateExpr === 'string' && data.rotateExpr.trim()) state.rotateExpr = data.rotateExpr;
     if (typeof data.keepOriginal === 'boolean') state.keepOriginal = data.keepOriginal;
     if (data.geom && Array.isArray(data.geom.points)) {
@@ -5861,6 +5976,14 @@ function bindUI() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', () => { draw(); saveSoon(); });
   });
+  const keyToggle = $('#showKeyPoints');
+  if (keyToggle) {
+    keyToggle.checked = state.showKeyPoints !== false;
+    keyToggle.addEventListener('change', () => {
+      state.showKeyPoints = keyToggle.checked;
+      draw(); saveSoon();
+    });
+  }
   $$('.conic-type').forEach(b => b.addEventListener('click', () => {
     state.conicType = b.dataset.conic;
     $$('.conic-type').forEach(x => x.classList.toggle('active', x.dataset.conic === state.conicType));
