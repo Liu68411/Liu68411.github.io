@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="description" content="用 NTC 热敏电阻、电磁继电器和 60Ω 反馈电阻 R0 设计一台 30℃ 启动、26℃ 停机的自动空调，并用可交互网页模拟电流、衔铁、触点与压缩机的联动过程。">
+<title>30℃ 启动 · 26℃ 停机｜电磁继电器温控空调实验室</title>
+<style>
+  :root{
+    --ink:#1f2937;
+    --muted:#6b7280;
+    --soft:#8b8272;
+    --paper:#f6f4ee;
+    --card:#fffdf9;
+    --line:#e6dfd2;
+    --teal:#0f766e;
+    --teal2:#14b8a6;
+    --ice:#0891b2;
+    --blue:#2563eb;
+    --violet:#7c3aed;
+    --heat:#ea580c;
+    --gold:#f59e0b;
+    --shadow:0 26px 70px -46px rgba(70,55,25,.58);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:var(--ink);
+    line-height:1.6;
+    background:
+      radial-gradient(900px 560px at 4% -8%, #d8f5f1 0%, rgba(216,245,241,0) 60%),
+      radial-gradient(820px 520px at 100% 0%, #e3f2fd 0%, rgba(227,242,253,0) 58%),
+      radial-gradient(760px 460px at 58% 108%, #fff0d6 0%, rgba(255,240,214,0) 62%),
+      var(--paper);
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  button,input{font:inherit}
+  button{color:inherit}
+  .page{max-width:1180px;margin:0 auto;padding:22px 24px 58px}
+
+  /* ---------- top nav ---------- */
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:4px 0 28px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px;text-decoration:none}
+  .logo{width:34px;height:34px;border-radius:11px;background:linear-gradient(140deg,#0f766e,#7c3aed);color:#fff;display:grid;place-items:center;font-family:"Cambria Math",Georgia,serif;font-size:18px;box-shadow:0 10px 20px -10px rgba(80,70,180,.7)}
+  .nav nav{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .nav nav a{font-size:13px;font-weight:700;color:#5b5344;text-decoration:none;padding:7px 11px;border-radius:999px;transition:.2s}
+  .nav nav a:hover{background:#fff;color:var(--teal);box-shadow:0 2px 8px rgba(70,55,25,.08)}
+
+  /* ---------- hero ---------- */
+  .hero{display:flex;align-items:flex-end;justify-content:space-between;gap:34px;padding:8px 0 10px}
+  .hero-copy{max-width:820px}
+  .kicker{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.22em;color:var(--teal)}
+  .kicker::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--teal2);box-shadow:0 0 0 4px rgba(20,184,166,.15)}
+  h1{font-size:clamp(38px,5.8vw,62px);line-height:1.08;letter-spacing:-.045em;margin:14px 0 15px;font-weight:800;text-wrap:balance}
+  h1 em{font-style:normal;background:linear-gradient(112deg,#0f766e 4%,#0891b2 42%,#2563eb 68%,#f59e0b 106%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{max-width:700px;margin:0;color:#5b5344;font-size:15px;line-height:1.9}
+  .lead b{color:var(--ink)}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+  .pill{font-size:12px;font-weight:700;color:#5b5344;background:rgba(255,253,249,.92);border:1px solid var(--line);padding:7px 11px;border-radius:999px;box-shadow:0 4px 12px rgba(70,55,25,.03)}
+  .pill i{font-style:normal;color:var(--teal);font-weight:800}
+  .hero-badge{flex:none;width:190px;padding:18px 18px 16px;border-radius:24px;border:1px solid #cce9e5;background:linear-gradient(155deg,rgba(255,255,255,.92),rgba(236,253,250,.82));box-shadow:var(--shadow);text-align:center;position:relative;overflow:hidden}
+  .hero-badge::before{content:"";position:absolute;inset:-40px -30px auto auto;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,#fde68a 0%,rgba(253,230,138,0) 66%)}
+  .hero-badge .badge-label{position:relative;font-size:9px;font-weight:800;letter-spacing:.19em;color:#8a8170}
+  .hero-badge .badge-num{position:relative;font-size:58px;line-height:1.02;font-weight:800;letter-spacing:-.07em;color:var(--teal);margin:7px 0 2px;font-variant-numeric:tabular-nums}
+  .hero-badge .badge-num span{font-size:22px;letter-spacing:0;margin-left:2px;color:#3d7d76}
+  .hero-badge .badge-caption{position:relative;font-size:12px;font-weight:800;color:#4b5563}
+  .hero-badge .badge-scale{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:11px;font-size:10px;font-weight:700;color:#7b8491}
+  .hero-badge .badge-scale i{width:28px;height:2px;border-radius:2px;background:linear-gradient(90deg,#2563eb,#f59e0b)}
+
+  /* ---------- layout / cards ---------- */
+  .section{margin-top:30px}
+  .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:0 2px 14px;flex-wrap:wrap}
+  .sec-head .left{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .sec-head h2{font-size:22px;margin:0;font-weight:800;letter-spacing:-.015em}
+  .sec-head .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px rgba(15,118,110,.12);transform:translateY(-2px)}
+  .sec-head .sub{font-size:12px;color:#8b8272}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
+  .lab{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(330px,.78fr);gap:20px;align-items:stretch}
+
+  /* ---------- scene ---------- */
+  .scene{overflow:hidden;background:
+    radial-gradient(420px 300px at 82% 8%,rgba(125,211,252,.34),transparent 68%),
+    linear-gradient(158deg,#f9feff 0%,#edf9f9 52%,#f7fbf4 100%);
+    transition:border-color .3s,box-shadow .3s}
+  .scene.is-on{border-color:#a5e3e5;box-shadow:0 30px 74px -46px rgba(8,145,178,.55)}
+  .scene-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 20px 10px}
+  .scene-title{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.09em;color:#5b6b6b}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.13);animation:pulse 2s ease-in-out infinite}
+  .state-chip{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:800;color:#667085;background:#fff;border:1px solid #dbe7e5;transition:.25s}
+  .state-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:#94a3b8}
+  .state-chip.on{color:#075985;background:#e0f5ff;border-color:#bae6fd}
+  .state-chip.on::before{background:#0284c7;box-shadow:0 0 0 4px rgba(2,132,199,.12);animation:pulse 1.6s ease-in-out infinite}
+
+  .scene-body{display:grid;grid-template-columns:minmax(240px,.92fr) minmax(270px,1.08fr);gap:10px;align-items:center;padding:2px 18px 6px}
+  .gauge-box{position:relative;width:100%;max-width:330px;margin:0 auto;aspect-ratio:1/1}
+  .gauge-svg{display:block;width:100%;height:100%;overflow:visible}
+  .gauge-track{fill:none;stroke:#e4eeed;stroke-width:14;stroke-linecap:round}
+  .gauge-arc{fill:none;stroke:url(#gaugeGrad);stroke-width:14;stroke-linecap:round}
+  .gauge-tick{stroke:#cddcda;stroke-width:1.6;stroke-linecap:round}
+  .gauge-tick.major{stroke:#7d9d98;stroke-width:2.4}
+  .gauge-tick.hot{stroke:#f59e0b;stroke-width:2.8}
+  .gauge-tick.cool{stroke:#2563eb;stroke-width:2.8}
+  .gauge-label{font-size:10px;fill:#8a9a98;font-weight:700;font-family:inherit}
+  .gauge-label.threshold{font-size:10.5px;font-weight:800}
+  .gauge-label.cool{fill:#2563eb}
+  .gauge-label.hot{fill:#d97706}
+  .gauge-dot-halo{fill:rgba(8,145,178,.16)}
+  .gauge-dot{fill:#fff;stroke:#0891b2;stroke-width:4;filter:drop-shadow(0 2px 5px rgba(8,145,178,.35))}
+  .gauge-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:8px;pointer-events:none}
+  .temp-value{font-size:clamp(46px,5vw,62px);line-height:1;font-weight:800;letter-spacing:-.075em;font-variant-numeric:tabular-nums;color:#133f3b}
+  .temp-value sup{font-size:.36em;letter-spacing:0;margin-left:3px;vertical-align:super;color:#4d7c78}
+  .temp-caption{margin-top:9px;font-size:11px;font-weight:700;letter-spacing:.14em;color:#8a9a98}
+  .gauge-legend{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);display:flex;gap:7px;white-space:nowrap}
+  .gauge-legend span{font-size:9.5px;font-weight:800;padding:3px 7px;border-radius:999px;background:#fff;border:1px solid #dcebea;color:#6b7f7c}
+  .gauge-legend .cool{color:#2563eb;border-color:#dbeafe;background:#f4f9ff}
+  .gauge-legend .hot{color:#c2410c;border-color:#ffedd5;background:#fff8f1}
+
+  /* room illustration */
+  .room-art{position:relative;height:292px;border-radius:20px;overflow:hidden;border:1px solid #d6e9ec;background:
+    linear-gradient(180deg,#eefaff 0%,#f9fdff 57%,#e6f0e5 57%,#d9e7d7 100%);
+    box-shadow:inset 0 1px 0 #fff}
+  .window{position:absolute;left:18px;top:20px;width:96px;height:86px;border:6px solid #fff;border-radius:10px;background:linear-gradient(180deg,#bae6fd,#e0f2fe 68%);box-shadow:0 8px 18px -12px rgba(30,64,95,.35)}
+  .window::before,.window::after{content:"";position:absolute;background:#fff;z-index:2}
+  .window::before{left:50%;top:0;bottom:0;width:4px;transform:translateX(-50%)}
+  .window::after{left:0;right:0;top:50%;height:4px;transform:translateY(-50%)}
+  .sun{position:absolute;right:9px;top:8px;width:22px;height:22px;border-radius:50%;background:#fbbf24;box-shadow:0 0 0 6px rgba(251,191,36,.18)}
+  .cloud{position:absolute;height:9px;border-radius:999px;background:#fff;opacity:.9}
+  .cloud::before,.cloud::after{content:"";position:absolute;border-radius:50%;background:inherit}
+  .cloud::before{width:13px;height:13px;left:4px;top:-6px}
+  .cloud::after{width:9px;height:9px;right:4px;top:-4px}
+  .cloud.c1{width:32px;left:8px;top:28px}
+  .cloud.c2{width:23px;right:9px;top:48px;opacity:.65}
+  .ac-unit{position:absolute;right:18px;top:22px;width:146px;height:66px;border-radius:16px;background:linear-gradient(180deg,#fff,#f3fafc);border:1px solid #d7e8eb;box-shadow:0 14px 24px -18px rgba(30,64,95,.55);z-index:3}
+  .ac-brand{display:flex;align-items:center;justify-content:space-between;padding:9px 12px 4px;font-size:9px;font-weight:800;letter-spacing:.16em;color:#a4b3b7}
+  .ac-led{width:6px;height:6px;border-radius:50%;background:#cbd5e1;transition:.25s}
+  .room-art[data-on="true"] .ac-led{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.13);animation:pulse 1.6s infinite}
+  .ac-grille{margin:3px 12px 0;height:8px;border-radius:4px;background:repeating-linear-gradient(90deg,#dbe7e9 0 4px,#f6fbfc 4px 8px)}
+  .ac-fan{position:absolute;right:12px;bottom:8px;width:25px;height:25px;border-radius:50%;background:conic-gradient(from 0deg,#bae6fd 0 18%,#e0f2fe 18% 33%,#bae6fd 33% 51%,#e0f2fe 51% 66%,#bae6fd 66% 84%,#e0f2fe 84% 100%);border:1px solid #cfe8ee;box-shadow:inset 0 0 0 5px rgba(255,255,255,.74)}
+  .ac-fan::after{content:"";position:absolute;inset:50% auto auto 50%;width:4px;height:4px;border-radius:50%;background:#6b8f96;transform:translate(-50%,-50%)}
+  .room-art[data-on="true"] .ac-fan{animation:fan 1.1s linear infinite}
+  .airflow{position:absolute;right:16px;top:92px;width:156px;height:78px;z-index:2;pointer-events:none}
+  .airflow i{position:absolute;left:0;width:108px;height:30px;border-bottom:2px solid #38bdf8;border-radius:50%;opacity:0;transform:rotate(-7deg);animation:airflow 2.2s linear infinite;animation-play-state:paused}
+  .airflow i:nth-child(1){top:2px}
+  .airflow i:nth-child(2){top:21px;width:138px;animation-delay:.55s;opacity:0}
+  .airflow i:nth-child(3){top:41px;width:92px;animation-delay:1.1s;opacity:0}
+  .room-art[data-on="true"] .airflow i{animation-play-state:running}
+  .desk{position:absolute;left:16px;bottom:0;width:94px;height:45px;background:linear-gradient(180deg,#b7cfb5,#9ebc9c);border-radius:8px 8px 0 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.55)}
+  .desk::before{content:"";position:absolute;left:8px;right:8px;top:-5px;height:6px;border-radius:6px;background:#cce0ca}
+  .plant{position:absolute;left:43px;bottom:38px;width:40px;height:48px;z-index:2}
+  .plant .pot{position:absolute;left:8px;bottom:0;width:25px;height:18px;border-radius:4px 4px 8px 8px;background:linear-gradient(180deg,#f3b56b,#d98b45)}
+  .plant .leaf{position:absolute;left:16px;bottom:15px;width:18px;height:25px;border-radius:100% 0 100% 0;background:linear-gradient(145deg,#4ade80,#15803d);transform-origin:bottom center}
+  .plant .leaf.l1{transform:rotate(-27deg)}
+  .plant .leaf.l2{transform:rotate(21deg);left:22px;background:linear-gradient(145deg,#86efac,#16a34a)}
+  .plant .leaf.l3{transform:rotate(3deg);left:19px;bottom:21px;width:15px;height:23px;background:linear-gradient(145deg,#34d399,#047857)}
+  .room-caption{position:absolute;right:14px;bottom:13px;z-index:4;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.92);border:1px solid #dcebea;font-size:10px;font-weight:800;color:#64748b;box-shadow:0 6px 14px -10px rgba(15,23,42,.3)}
+  .room-art[data-on="true"] .room-caption{color:#0369a1;border-color:#bae6fd;background:#f0faff}
+
+  .scene-foot{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;margin-top:4px;padding:13px 20px 16px;border-top:1px solid rgba(211,231,230,.78)}
+  .scene-foot>div{display:flex;align-items:baseline;gap:6px;min-width:0}
+  .scene-foot .foot-label{font-size:10px;font-weight:800;letter-spacing:.1em;color:#97a5a3}
+  .scene-foot b{font-size:13px;font-weight:800;color:#365452;font-variant-numeric:tabular-nums}
+  .scene-foot .cycle-hint{justify-content:center;text-align:center;font-size:11px;font-weight:700;color:#69817e;background:#fff;border:1px solid #e1ecea;border-radius:999px;padding:6px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .scene-foot .cycle-hint.warn{color:#b45309;background:#fffaf0;border-color:#fde8bf}
+  .scene-foot .cycle-hint.on{color:#0369a1;background:#f1faff;border-color:#c7ecfb}
+
+  /* ---------- control panel ---------- */
+  .control{padding:20px 20px 18px;display:flex;flex-direction:column;gap:15px}
+  .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .panel-head .eyebrow{font-size:9px;font-weight:800;letter-spacing:.2em;color:#9a8f7a}
+  .panel-head h2{font-size:21px;margin:3px 0 0;font-weight:800;letter-spacing:-.02em}
+  .auto-chip{font-size:9.5px;font-weight:800;letter-spacing:.12em;padding:5px 9px;border-radius:999px;background:#e9fbf7;border:1px solid #bdeee5;color:#0f766e}
+  .auto-chip.manual{background:#fff8e8;border-color:#f6dfb6;color:#b45309}
+  .control-item{display:flex;flex-direction:column;gap:7px}
+  .label-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .label-row label,.label-text{font-size:12.5px;font-weight:800;color:#44514f}
+  .label-row b{font-size:13px;font-weight:800;color:var(--teal);font-variant-numeric:tabular-nums}
+  input[type="range"]{
+    -webkit-appearance:none;appearance:none;width:100%;height:8px;border-radius:999px;outline:none;cursor:pointer;
+    background:linear-gradient(90deg,#38bdf8,#14b8a6 56%,#f59e0b) 0/var(--p,50%) 100% no-repeat,#e6eceb;
+    box-shadow:inset 0 1px 2px rgba(15,23,42,.06);
+  }
+  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:4px solid var(--teal);box-shadow:0 4px 10px -2px rgba(15,118,110,.45);cursor:grab}
+  input[type="range"]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:4px solid var(--teal);box-shadow:0 4px 10px -2px rgba(15,118,110,.45);cursor:grab}
+  input[type="range"]:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.06)}
+  .hint{margin:0;font-size:10.5px;line-height:1.55;color:#98a3a1}
+  .speed-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .seg{display:flex;padding:3px;border-radius:10px;background:#f0f3f1;border:1px solid #e2e8e5;gap:2px}
+  .seg button{appearance:none;border:0;background:transparent;border-radius:7px;padding:4px 9px;font-size:10.5px;font-weight:800;color:#7b8784;cursor:pointer;transition:.2s}
+  .seg button.active{background:#fff;color:var(--teal);box-shadow:0 2px 7px rgba(15,23,42,.08)}
+  .action-row{display:grid;grid-template-columns:1.35fr .85fr;gap:8px}
+  .btn{appearance:none;border:1px solid transparent;border-radius:12px;padding:10px 12px;font-size:12px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .18s,box-shadow .18s,background .18s}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:linear-gradient(135deg,#0f766e,#0891b2);color:#fff;box-shadow:0 10px 20px -12px rgba(8,145,178,.7)}
+  .btn.primary:hover{box-shadow:0 14px 24px -12px rgba(8,145,178,.8)}
+  .btn.ghost{background:#fff;border-color:#dce8e5;color:#526662}
+  .btn.ghost:hover{background:#f8fbfa}
+  .feedback-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 12px;border-radius:13px;background:#f8fbfa;border:1px solid #e3ece9}
+  .feedback-row strong{display:block;font-size:11.5px;color:#425552}
+  .feedback-row small{display:block;margin-top:2px;font-size:9.5px;line-height:1.45;color:#97a5a2}
+  .switch{position:relative;display:inline-flex;width:42px;height:24px;flex:none;cursor:pointer}
+  .switch input{position:absolute;opacity:0;width:1px;height:1px}
+  .switch span{position:absolute;inset:0;border-radius:999px;background:#d7e2df;transition:.22s}
+  .switch span::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(15,23,42,.18);transition:.22s}
+  .switch input:checked+span{background:var(--teal)}
+  .switch input:checked+span::after{transform:translateX(18px)}
+  .switch input:focus-visible+span{outline:2px solid #2563eb;outline-offset:2px}
+  .mini-status{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:auto;padding-top:12px;border-top:1px solid #edf1ee}
+  .mini-status div{display:flex;flex-direction:column;gap:3px;padding:6px 8px;border-radius:9px;background:#fbfdfb;border:1px solid #edf2ef;min-width:0}
+  .mini-status span{font-size:9px;font-weight:800;letter-spacing:.06em;color:#9aa6a3}
+  .mini-status b{font-size:11px;font-weight:800;color:#31514d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+
+  /* ---------- monitor ---------- */
+  .monitor{display:grid;grid-template-columns:1.18fr .82fr;gap:18px;margin-top:18px}
+  .current-card{padding:20px 22px 18px;background:linear-gradient(150deg,#fffdf9,#f5fdfb);border-color:#dcece8}
+  .monitor-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}
+  .monitor-label{font-size:10px;font-weight:800;letter-spacing:.12em;color:#95a29f}
+  .big-current{font-size:37px;line-height:1;font-weight:800;letter-spacing:-.04em;color:#164e48;margin-top:5px;font-variant-numeric:tabular-nums}
+  .big-current small{font-size:13px;letter-spacing:0;color:#69817c;margin-left:4px;font-weight:700}
+  .threshold-pill{display:inline-flex;flex-direction:column;align-items:flex-end;gap:2px;padding:7px 10px;border-radius:10px;background:#fff;border:1px solid #dfeae7}
+  .threshold-pill span{font-size:9px;font-weight:800;letter-spacing:.08em;color:#9aa6a3}
+  .threshold-pill b{font-size:12.5px;color:#b45309;font-variant-numeric:tabular-nums}
+  .meter-track{position:relative;height:24px;border-radius:999px;background:repeating-linear-gradient(90deg,#edf2f0 0 10px,#f7faf9 10px 20px);overflow:visible;border:1px solid #e8efec}
+  .meter-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:linear-gradient(90deg,#0ea5e9,#14b8a6);transition:width .18s linear,background .25s;box-shadow:0 0 14px rgba(20,184,166,.18)}
+  .meter-fill.over{background:linear-gradient(90deg,#0ea5e9,#14b8a6 55%,#f59e0b)}
+  .meter-mark{position:absolute;left:50%;top:-5px;bottom:-5px;width:2px;background:#f59e0b;z-index:3;border-radius:2px;box-shadow:0 0 0 2px rgba(245,158,11,.12)}
+  .meter-mark span{position:absolute;left:50%;top:-17px;transform:translateX(-50%);font-size:8.5px;font-weight:800;color:#b45309;white-space:nowrap}
+  .meter-foot{display:flex;justify-content:space-between;margin-top:9px;font-size:9px;font-weight:700;color:#a0adaa;font-variant-numeric:tabular-nums}
+  .meter-state{margin-top:10px;font-size:11px;font-weight:700;color:#7a8d89;min-height:18px}
+  .meter-state.hot{color:#b45309}
+  .meter-state.on{color:#0369a1}
+  .metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .metric{padding:12px 13px 11px;border-radius:14px;background:#fff;border:1px solid #e9eee9;display:flex;flex-direction:column;gap:3px;min-width:0}
+  .metric span{font-size:9.5px;font-weight:800;letter-spacing:.08em;color:#99a5a2}
+  .metric b{font-size:17px;font-weight:800;letter-spacing:-.02em;color:#2d514b;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric small{font-size:9.5px;line-height:1.45;color:#a0aba8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ---------- circuit ---------- */
+  .circuit-card{padding:20px 22px 18px;margin-top:18px;overflow:hidden}
+  .card-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+  .card-head .eyebrow{display:block;font-size:9px;font-weight:800;letter-spacing:.19em;color:#9a8f7a;margin-bottom:2px}
+  .card-head h2{font-size:21px;line-height:1.25;margin:0;letter-spacing:-.018em;font-weight:800}
+  .legend{display:flex;gap:7px;flex-wrap:wrap;font-size:9.5px;font-weight:700;color:#7b8885}
+  .legend span{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:6px;background:#f7faf8;border:1px solid #e8eee9}
+  .legend i{width:16px;height:2px;border-radius:2px;background:#0f766e;flex:none}
+  .legend .dash{background:repeating-linear-gradient(90deg,#0ea5e9 0 4px,transparent 4px 8px)}
+  .legend .ac{background:#f59e0b}
+  .circuit-scroll{overflow-x:auto;overflow-y:hidden;border-radius:15px;background:#fbfdfc;border:1px solid #e8efec;padding:5px}
+  .circuit-svg{display:block;width:100%;min-width:930px;height:auto}
+  .wire{fill:none;stroke:#cadbd8;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+  .wire-warm{stroke:#e7d7c4}
+  .wire-thin{fill:none;stroke:#d8e4e1;stroke-width:1.2;stroke-dasharray:4 5}
+  .flow{fill:none;stroke-width:3.8;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:7 14;opacity:0;transition:opacity .2s;animation:flow 1.1s linear infinite}
+  .flow-control{stroke:#0ea5e9;opacity:.62}
+  .flow-r0{stroke:#7c3aed}
+  .flow-ac{stroke:#f59e0b}
+  .relay-on .flow-r0,.relay-on .flow-ac{opacity:1}
+  .relay-on .coil-box{filter:url(#coilGlow)}
+  .coil-box{fill:#fff;stroke:#0f766e;stroke-width:2.4;transition:filter .2s}
+  .coil-core{stroke:#8ab8b1;stroke-width:8;stroke-linecap:round}
+  .coil-turn{fill:none;stroke:#0f766e;stroke-width:2.2;stroke-linecap:round}
+  .component-box{fill:#fff;stroke:#0f766e;stroke-width:2.2}
+  .component-box.cool{stroke:#2563eb}
+  .component-box.warm{stroke:#b45309}
+  .component-label{font-size:11px;fill:#59706c;font-weight:700;font-family:inherit}
+  .component-value{font-size:12px;fill:#173f3a;font-weight:800;font-family:inherit;font-variant-numeric:tabular-nums}
+  .component-name{font-size:15px;fill:#164e48;font-weight:800;font-family:inherit}
+  .svg-title{font-size:12px;font-weight:800;fill:#4b615d;letter-spacing:.05em;font-family:inherit}
+  .svg-eyebrow{font-size:9px;font-weight:800;fill:#9aa6a3;letter-spacing:.18em;font-family:inherit}
+  .svg-small{font-size:9px;fill:#8b9a97;font-weight:700;font-family:inherit}
+  .svg-tiny{font-size:8px;fill:#a0adaa;font-weight:700;font-family:inherit}
+  .contact-blade{stroke:#0f766e;stroke-width:3;stroke-linecap:round;transform-box:view-box;transform-origin:400px 110px;transition:transform .24s cubic-bezier(.3,1.4,.5,1)}
+  .contact-blade.warm{stroke:#b45309;transform-origin:710px 135px}
+  .contact-dot{fill:#0f766e}
+  .contact-dot.warm{fill:#b45309}
+  .contact-label{font-size:8px;font-weight:800;fill:#98a5a2;font-family:inherit}
+  .contact-state{font-size:8px;font-weight:800;fill:#0f766e;font-family:inherit}
+  .contact-state.off{fill:#a3afac}
+  .divider{stroke:#dce7e3;stroke-width:1.2;stroke-dasharray:5 6}
+  .isolation-label{font-size:8px;font-weight:800;fill:#b0bbb7;letter-spacing:.16em;font-family:inherit}
+  .compressor-body{fill:#fffaf2;stroke:#b45309;stroke-width:2.4}
+  .compressor-fan{transform-box:fill-box;transform-origin:center;transition:transform .2s}
+  .relay-on .compressor-fan{animation:fan 1.25s linear infinite}
+  .compressor-m{font-size:17px;font-weight:800;fill:#b45309;font-family:inherit}
+  .circuit-note{display:flex;gap:9px;align-items:flex-start;margin-top:10px;padding:10px 12px;border-radius:11px;background:#f8fbf9;border:1px dashed #dce8e4;font-size:10.5px;line-height:1.7;color:#7d8b88}
+  .circuit-note b{color:#45635d}
+  .circuit-note .tag{flex:none;font-size:9px;font-weight:800;letter-spacing:.08em;color:#0f766e;background:#e9fbf7;border:1px solid #c9f0e8;border-radius:5px;padding:2px 6px;margin-top:1px}
+
+  /* ---------- chart ---------- */
+  .chart-card{padding:20px 22px 16px;margin-top:18px}
+  .chart-box{position:relative;height:286px;border-radius:14px;background:#fbfdfb;border:1px solid #e8efec;overflow:hidden}
+  #chart{display:block;width:100%;height:100%}
+  .chart-legend{display:flex;gap:8px;flex-wrap:wrap;font-size:9.5px;font-weight:700;color:#7c8986}
+  .chart-legend span{display:inline-flex;align-items:center;gap:5px}
+  .chart-legend i{width:14px;height:7px;border-radius:3px;background:rgba(8,145,178,.16);border:1px solid rgba(8,145,178,.18)}
+  .chart-legend .line{width:16px;height:2px;background:#0f766e;border:0;border-radius:2px}
+  .chart-legend .thr{width:16px;height:0;border-top:2px dashed #f59e0b;background:transparent}
+  .chart-hint{margin:9px 1px 0;font-size:10.5px;color:#8a9794}
+  .chart-hint b{color:#526b66}
+
+  /* ---------- principle ---------- */
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+  .step-card{position:relative;padding:18px 16px 16px;border-radius:17px;background:rgba(255,253,249,.95);border:1px solid #e7dfd2;box-shadow:0 18px 40px -38px rgba(70,55,25,.55);overflow:hidden}
+  .step-card::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,#0f766e,#14b8a6)}
+  .step-card:nth-child(2)::before{background:linear-gradient(90deg,#0891b2,#38bdf8)}
+  .step-card:nth-child(3)::before{background:linear-gradient(90deg,#7c3aed,#a78bfa)}
+  .step-card:nth-child(4)::before{background:linear-gradient(90deg,#f59e0b,#fb923c)}
+  .step-num{display:inline-grid;place-items:center;width:25px;height:25px;border-radius:8px;background:#f1f7f4;color:#0f766e;font-size:10px;font-weight:800;letter-spacing:.03em}
+  .step-card h3{font-size:15px;line-height:1.35;margin:10px 0 6px;font-weight:800;letter-spacing:-.012em}
+  .step-card p{margin:0;font-size:11px;line-height:1.75;color:#7b7468}
+  .step-card p b{color:#4b5e59}
+
+  .eq-band{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:14px}
+  .eq-card{padding:16px 18px;border-radius:16px;border:1px solid #dfeae5;background:linear-gradient(140deg,#fffdf9,#f7fdfa)}
+  .eq-card.warm{background:linear-gradient(140deg,#fffdf9,#fffaf1);border-color:#f0e3c9}
+  .eq-label{font-size:9.5px;font-weight:800;letter-spacing:.14em;color:#97a39f}
+  .eq-card.warm .eq-label{color:#b08a52}
+  .eq-formula{display:block;margin:7px 0 5px;font-family:"Cascadia Code","SFMono-Regular",Consolas,monospace;font-size:13px;line-height:1.6;font-weight:700;color:#174b44;word-break:break-word}
+  .eq-card.warm .eq-formula{color:#8a4c13}
+  .eq-card p{margin:0;font-size:10.5px;line-height:1.65;color:#8b958f}
+
+  .key-note{display:flex;align-items:flex-start;gap:13px;margin-top:14px;padding:16px 18px;border-radius:16px;background:linear-gradient(110deg,#ecfdf8,#f2f8ff);border:1px solid #cfebe4}
+  .key-note .key-tag{flex:none;font-size:9px;font-weight:800;letter-spacing:.1em;color:#fff;background:#0f766e;border-radius:6px;padding:4px 8px;margin-top:1px}
+  .key-note p{margin:0;font-size:12px;line-height:1.8;color:#45615b}
+  .key-note b{color:#0c5f57}
+
+  /* ---------- design ---------- */
+  .design-grid{display:grid;grid-template-columns:1.08fr .92fr;gap:14px;margin-top:14px}
+  .design-card{padding:18px 19px;border-radius:17px;background:rgba(255,253,249,.95);border:1px solid #e7dfd2;box-shadow:0 18px 40px -40px rgba(70,55,25,.52)}
+  .design-card h3{margin:0 0 9px;font-size:15px;font-weight:800;letter-spacing:-.01em}
+  .design-card p{margin:0;font-size:11px;line-height:1.75;color:#7d766b}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .chips span{font-size:10px;font-weight:700;color:#5e6d69;background:#f4f8f5;border:1px solid #e4ece7;padding:4px 8px;border-radius:6px}
+  .steps-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+  .steps-list li{display:flex;gap:9px;font-size:11px;line-height:1.65;color:#766f64}
+  .steps-list b{display:inline-grid;place-items:center;flex:none;width:20px;height:20px;border-radius:6px;background:#eef8f4;color:#0f766e;font-size:9.5px;font-weight:800;margin-top:1px}
+  .safety{margin-top:10px;padding:10px 12px;border-radius:10px;background:#fff9ef;border:1px solid #f3e1bd;font-size:10px;line-height:1.7;color:#9a6b2b}
+  .safety b{color:#8a4c13}
+  .qa{margin-top:14px;border-radius:17px;background:rgba(255,253,249,.95);border:1px solid #e7dfd2;overflow:hidden}
+  .qa details{border-top:1px solid #eee6d9;padding:0 18px}
+  .qa details:first-child{border-top:0}
+  .qa summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;font-size:12px;font-weight:800;color:#475b56;cursor:pointer;list-style:none}
+  .qa summary::-webkit-details-marker{display:none}
+  .qa summary::after{content:"+";font-size:16px;font-weight:700;color:#9aa8a3;line-height:1}
+  .qa details[open] summary::after{content:"−"}
+  .qa details p{margin:0 0 13px;padding-left:1px;font-size:10.5px;line-height:1.8;color:#7c8782}
+
+  footer{margin-top:34px;padding-top:17px;border-top:1px solid rgba(214,203,182,.7);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:11px;color:#9a8f7a}
+  footer b{color:#64748b;font-weight:700}
+  footer a{text-decoration:none;font-weight:700;color:#0f766e}
+  footer a:hover{text-decoration:underline}
+
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  @keyframes fan{to{transform:rotate(360deg)}}
+  @keyframes airflow{0%{opacity:0;transform:translate(0,-3px) rotate(-7deg)}18%{opacity:.7}70%{opacity:.4}100%{opacity:0;transform:translate(26px,9px) rotate(-7deg)}}
+  @keyframes flow{to{stroke-dashoffset:-42}}
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important}
+  }
+
+  @media (max-width:980px){
+    .lab{grid-template-columns:1fr}
+    .control{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
+    .panel-head,.action-row,.feedback-row,.mini-status{grid-column:1/-1}
+    .mini-status{margin-top:0}
+    .monitor{grid-template-columns:1fr}
+    .steps{grid-template-columns:1fr 1fr}
+    .hero-badge{display:none}
+  }
+  @media (max-width:760px){
+    .page{padding:18px 15px 44px}
+    .nav{padding-bottom:18px}
+    .nav nav{display:none}
+    .hero{padding-top:2px}
+    h1{font-size:clamp(34px,10vw,44px)}
+    .lead{font-size:13.5px}
+    .scene-body{grid-template-columns:1fr;padding:0 14px 4px}
+    .gauge-box{max-width:292px}
+    .room-art{height:220px;margin-top:2px}
+    .scene-foot{grid-template-columns:1fr 1fr;padding:12px 15px 14px}
+    .scene-foot .cycle-hint{grid-column:1/-1;grid-row:2;white-space:normal}
+    .control{grid-template-columns:1fr;padding:17px}
+    .panel-head,.action-row,.feedback-row,.mini-status{grid-column:auto}
+    .monitor{margin-top:14px}
+    .metric-grid{grid-template-columns:1fr 1fr}
+    .circuit-card,.chart-card{padding:17px 15px 15px}
+    .eq-band,.design-grid{grid-template-columns:1fr}
+    .steps{grid-template-columns:1fr 1fr}
+    .chart-box{height:240px}
+  }
+  @media (max-width:480px){
+    h1{font-size:33px}
+    .pills{gap:6px}
+    .pill{font-size:10.5px;padding:6px 9px}
+    .scene-head{padding:15px 15px 8px}
+    .scene-body{padding:0 10px 2px}
+    .gauge-box{max-width:254px}
+    .temp-value{font-size:46px}
+    .room-art{height:196px}
+    .ac-unit{width:124px;height:60px;right:12px}
+    .airflow{right:8px}
+    .steps{grid-template-columns:1fr}
+    .metric-grid{grid-template-columns:1fr}
+    .mini-status{grid-template-columns:repeat(3,1fr)}
+    .mini-status div:last-child{grid-column:auto}
+    .action-row{grid-template-columns:1fr 1fr}
+    .hero-badge{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="nav">
+    <a class="brand" href="index.html"><span class="logo">∑</span>交互实验室</a>
+    <nav>
+      <a href="index.html#physics">物理演示</a>
+      <a href="index.html#studio">函数与几何</a>
+      <a href="index.html#daily">每日一练</a>
+      <a href="index.html">返回首页</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="kicker">ELECTROMAGNETIC THERMOSTAT</div>
+      <h1>30℃ 启动，<br><em>26℃ 停机</em></h1>
+      <p class="lead">电磁铁的吸力由电流决定。把 <b>NTC 热敏电阻 R₁</b>、继电器线圈和一只反馈电阻 <b>R₀</b> 接在一起，就能让 30℃ 成为启动点、26℃ 成为停机点——不是靠两个温度计，而是靠继电器吸合后<b>自己改变控制电流</b>。</p>
+      <div class="pills">
+        <span class="pill"><i>NTC</i> 温度↑ 电阻↓</span>
+        <span class="pill"><i>I₀</i> = 150 mA</span>
+        <span class="pill"><i>R₀</i> = 60 Ω 反馈</span>
+        <span class="pill"><i>4℃</i> 温度回差</span>
+      </div>
+    </div>
+    <div class="hero-badge" aria-hidden="true">
+      <div class="badge-label">DEAD BAND</div>
+      <div class="badge-num">4<span>℃</span></div>
+      <div class="badge-caption">温度回差</div>
+      <div class="badge-scale"><span>26 停机</span><i></i><span>30 启动</span></div>
+    </div>
+  </section>
+
+  <section class="lab section" id="lab">
+    <div class="scene card" id="scene">
+      <div class="scene-head">
+        <div class="scene-title"><span class="live-dot"></span> 模拟房间 · LIVE</div>
+        <div class="state-chip" id="stateChip" aria-live="polite">待机</div>
+      </div>
+
+      <div class="scene-body">
+        <div class="gauge-box">
+          <svg class="gauge-svg" viewBox="0 0 280 280" aria-hidden="true">
+            <defs>
+              <linearGradient id="gaugeGrad" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0" stop-color="#2563eb"/>
+                <stop offset=".38" stop-color="#0891b2"/>
+                <stop offset=".62" stop-color="#14b8a6"/>
+                <stop offset="1" stop-color="#f59e0b"/>
+              </linearGradient>
+            </defs>
+            <path id="gaugeTrack" class="gauge-track" d=""/>
+            <path id="gaugeArc" class="gauge-arc" d=""/>
+            <g id="gaugeTicks"></g>
+            <circle id="gaugeDotHalo" class="gauge-dot-halo" cx="140" cy="145" r="12"/>
+            <circle id="gaugeDot" class="gauge-dot" cx="140" cy="145" r="5.5"/>
+          </svg>
+          <div class="gauge-center">
+            <div class="temp-value"><span id="tempBig">28.0</span><sup>℃</sup></div>
+            <div class="temp-caption">室内温度</div>
+          </div>
+          <div class="gauge-legend"><span class="cool">26 停机</span><span class="hot">30 启动</span></div>
+        </div>
+
+        <div class="room-art" id="roomArt" data-on="false">
+          <div class="window"><div class="sun"></div><div class="cloud c1"></div><div class="cloud c2"></div></div>
+          <div class="ac-unit">
+            <div class="ac-brand"><span>COOL</span><i class="ac-led"></i></div>
+            <div class="ac-grille"></div>
+            <div class="ac-fan"></div>
+          </div>
+          <div class="airflow"><i></i><i></i><i></i></div>
+          <div class="desk"></div>
+          <div class="plant"><span class="leaf l1"></span><span class="leaf l2"></span><span class="leaf l3"></span><span class="pot"></span></div>
+          <div class="room-caption" id="roomLabel">等待 30℃</div>
+        </div>
+      </div>
+
+      <div class="scene-foot">
+        <div><span class="foot-label">室外</span><b id="outdoor">34.0℃</b></div>
+        <div class="cycle-hint" id="cycleHint" aria-live="polite">升温中 · 到 30℃ 吸合</div>
+        <div><span class="foot-label">模式</span><b id="runMode">自动</b></div>
+      </div>
+    </div>
+
+    <aside class="control card" aria-label="模拟控制台">
+      <div class="panel-head">
+        <div><div class="eyebrow">CONTROL DESK</div><h2>控制台</h2></div>
+        <span class="auto-chip" id="autoChip">AUTO</span>
+      </div>
+
+      <div class="control-item">
+        <div class="label-row"><label for="ambient">室外温度</label><b id="ambientVal">34.0℃</b></div>
+        <input id="ambient" type="range" min="28" max="38" step="0.5" value="34" aria-label="室外温度">
+        <p class="hint">决定房间升温快慢；低于 30℃ 时，室温很难升到启动点。</p>
+      </div>
+
+      <div class="control-item">
+        <div class="label-row"><label for="manualTemp">手动设定室温</label><b id="manualVal">28.0℃</b></div>
+        <input id="manualTemp" type="range" min="18" max="36" step="0.1" value="28" aria-label="手动设定室温">
+        <p class="hint">拖动会暂停自动循环，适合慢慢跨过 30℃ 和 26℃ 观察状态。</p>
+      </div>
+
+      <div class="speed-row">
+        <span class="label-text">模拟速度</span>
+        <div class="seg" id="speedSeg" role="group" aria-label="模拟速度">
+          <button type="button" data-speed="0.5">0.5×</button>
+          <button type="button" data-speed="1" class="active">1×</button>
+          <button type="button" data-speed="2">2×</button>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn primary" id="playBtn" type="button"><span id="playIcon">❚❚</span><span id="playText">暂停</span></button>
+        <button class="btn ghost" id="resetBtn" type="button">重置</button>
+      </div>
+
+      <div class="feedback-row">
+        <div><strong>R₀ 反馈触点</strong><small>断开后只剩 30℃ 单阈值，会频繁启停</small></div>
+        <label class="switch" aria-label="R0 反馈触点开关">
+          <input id="feedback" type="checkbox" checked>
+          <span></span>
+        </label>
+      </div>
+
+      <div class="mini-status">
+        <div><span>继电器 K1</span><b id="relayChip">释放</b></div>
+        <div><span>控制电流</span><b id="currentPanel">100 mA</b></div>
+        <div><span>电流 / I₀</span><b id="ratioPanel">0.67</b></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="monitor" aria-label="实时数据">
+    <div class="current-card card">
+      <div class="monitor-top">
+        <div>
+          <div class="monitor-label">线圈电流 I</div>
+          <div class="big-current"><span id="iBig">100</span><small>mA</small></div>
+        </div>
+        <div class="threshold-pill"><span>吸合阈值 I₀</span><b>150 mA</b></div>
+      </div>
+      <div class="meter-track">
+        <div class="meter-fill" id="meterFill"></div>
+        <div class="meter-mark" aria-hidden="true"><span>I₀</span></div>
+      </div>
+      <div class="meter-foot"><span>0</span><span>150 mA</span><span>300 mA</span></div>
+      <div class="meter-state" id="meterState">低于 I₀ · 弹簧把衔铁拉住</div>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric"><span>R₁ 热敏电阻</span><b id="r1Metric">22.7 Ω</b><small>温度越高，阻值越小</small></div>
+      <div class="metric"><span>控制总电阻</span><b id="reqMetric">22.7 Ω</b><small>K1-1 闭合时 R₀ 并入</small></div>
+      <div class="metric"><span>继电器状态</span><b id="relayMetric">释放</b><small id="relaySub">K1-1 / K1-2 断开</small></div>
+      <div class="metric"><span>温度回差</span><b>4.0 ℃</b><small>30℃ 吸合 · 26℃ 释放</small></div>
+    </div>
+  </section>
+
+  <section class="circuit-card card section" id="circuit">
+    <div class="card-head">
+      <div>
+        <span class="eyebrow">SCHEMATIC</span>
+        <h2>控制电路与工作电路</h2>
+      </div>
+      <div class="legend" aria-label="图例">
+        <span><i></i>导线</span>
+        <span><i class="dash"></i>电流方向</span>
+        <span><i class="ac"></i>220V 工作电路</span>
+      </div>
+    </div>
+
+    <div class="circuit-scroll">
+      <svg id="circuitSvg" class="circuit-svg" viewBox="0 0 1040 520" role="img" aria-labelledby="circuitTitle circuitDesc">
+        <title id="circuitTitle">电磁继电器空调控制电路</title>
+        <desc id="circuitDesc">左侧为 3V 控制电路，包含热敏电阻 R1、继电器线圈和反馈电阻 R0；右侧为 220V 工作电路，包含继电器触点和空调压缩机。继电器吸合时，R0 与 R1 并联，同时接通压缩机。</desc>
+        <defs>
+          <filter id="coilGlow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="4" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <rect x="18" y="18" width="604" height="484" rx="18" fill="#f8fcfb" stroke="#d9ece8"/>
+        <rect x="638" y="18" width="384" height="484" rx="18" fill="#fffaf3" stroke="#f0dfc8"/>
+        <text x="42" y="51" class="svg-eyebrow">控制电路 · 3 V DC</text>
+        <text x="662" y="51" class="svg-eyebrow">工作电路 · 220 V AC</text>
+        <line class="divider" x1="620" y1="34" x2="620" y2="486"/>
+        <text x="613" y="264" class="isolation-label" transform="rotate(-90 613 264)">电气隔离</text>
+
+        <!-- control circuit base wires -->
+        <path class="wire" d="M64 110 H150"/>
+        <path class="wire" d="M256 110 H320"/>
+        <path class="wire" d="M64 110 V238"/>
+        <path class="wire" d="M64 264 V435 H520"/>
+        <path class="wire" d="M320 110 V176"/>
+        <path class="wire" d="M320 281 V435"/>
+        <path class="wire" d="M320 110 H400"/>
+        <path class="wire" d="M480 110 V181"/>
+        <path class="wire" d="M480 281 V435"/>
+        <path class="wire" d="M480 110 V98"/>
+
+        <!-- animated current paths (under components) -->
+        <path id="flowControl" class="flow flow-control" d="M64 435 V110 H320 V435 H64"/>
+        <path id="flowR0" class="flow flow-r0" d="M320 110 H400 L480 110 V435 H320"/>
+        <path id="flowAc" class="flow flow-ac" d="M680 435 V135 H880 V435 H680"/>
+
+        <!-- battery -->
+        <line x1="41" y1="238" x2="87" y2="238" stroke="#0f766e" stroke-width="3.4" stroke-linecap="round"/>
+        <line x1="51" y1="258" x2="77" y2="258" stroke="#0f766e" stroke-width="6.5" stroke-linecap="round"/>
+        <text x="96" y="245" class="component-label">+</text>
+        <text x="96" y="268" class="component-label">−</text>
+        <text x="30" y="303" class="component-name">3 V</text>
+        <text x="30" y="318" class="svg-tiny">控制电源</text>
+
+        <!-- relay coil -->
+        <g id="coilGroup">
+          <rect class="coil-box" x="150" y="78" width="106" height="64" rx="11"/>
+          <line class="coil-core" x1="174" y1="122" x2="232" y2="122"/>
+          <path class="coil-turn" d="M174 122 q5-25 10 0 q5-25 10 0 q5-25 10 0 q5-25 10 0 q5-25 10 0 q5-25 8 0"/>
+          <text x="203" y="98" text-anchor="middle" class="component-name">K1</text>
+          <text x="203" y="112" text-anchor="middle" class="component-label">线圈</text>
+        </g>
+        <text x="203" y="158" text-anchor="middle" class="svg-tiny">吸合电流 I₀ = 150 mA</text>
+
+        <!-- R1 NTC -->
+        <rect class="component-box cool" x="300" y="176" width="40" height="105" rx="7"/>
+        <path d="M312 266 L326 250 L320 246 L334 230 L328 226 L340 212" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M333 209 L341 211 L339 219" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="357" y="194" class="component-name">R₁</text>
+        <text x="357" y="211" class="component-label">NTC 热敏电阻</text>
+        <text id="r1Live" x="357" y="234" class="component-value">22.7 Ω</text>
+        <text x="357" y="251" class="svg-tiny">t↑ 则 R₁↓</text>
+
+        <!-- R0 feedback resistor -->
+        <rect class="component-box" x="460" y="181" width="40" height="100" rx="7" stroke="#7c3aed"/>
+        <text x="518" y="200" class="component-name">R₀</text>
+        <text x="518" y="216" class="component-label">60 Ω</text>
+        <text x="518" y="233" class="component-label">反馈电阻</text>
+        <text x="518" y="250" class="svg-tiny">吸合后才接入</text>
+
+        <!-- K1-1 feedback contact -->
+        <circle class="contact-dot" cx="400" cy="110" r="3.4"/>
+        <circle class="contact-dot" cx="480" cy="110" r="3.4"/>
+        <line id="blade1" class="contact-blade" x1="400" y1="110" x2="480" y2="110" style="transform:rotate(-28deg)"/>
+        <text x="408" y="75" class="component-label">K1-1</text>
+        <text id="k1State1" x="408" y="90" class="contact-state off">断开</text>
+        <path class="wire-thin" d="M446 101 C455 84 468 78 480 92"/>
+
+        <!-- control labels -->
+        <text x="64" y="466" class="svg-small">控制电路电流越大，电磁铁磁性越强</text>
+        <text x="320" y="466" text-anchor="middle" class="svg-tiny">R₁ 与 R₀ 只在 K1-1 闭合时并联</text>
+
+        <!-- work circuit base wires -->
+        <path class="wire wire-warm" d="M680 135 H710"/>
+        <path class="wire wire-warm" d="M780 135 H880"/>
+        <path class="wire wire-warm" d="M680 135 V344"/>
+        <path class="wire wire-warm" d="M680 392 V435 H880"/>
+        <path class="wire wire-warm" d="M880 135 V246"/>
+        <path class="wire wire-warm" d="M880 326 V435"/>
+
+        <!-- AC source -->
+        <circle cx="680" cy="368" r="24" fill="#fffaf3" stroke="#b45309" stroke-width="2.2"/>
+        <path d="M667 368 q6-12 12 0 t12 0" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round"/>
+        <text x="680" y="408" text-anchor="middle" class="component-label">220 V ~</text>
+        <text x="680" y="422" text-anchor="middle" class="svg-tiny">交流电源</text>
+
+        <!-- compressor -->
+        <circle class="compressor-body" cx="880" cy="286" r="40"/>
+        <g class="compressor-fan">
+          <path d="M880 260 C893 268 891 279 884 284 C876 274 873 267 880 260Z" fill="#fcd9b4"/>
+          <path d="M903 279 C900 293 890 296 883 290 C891 280 898 275 903 279Z" fill="#fcd9b4"/>
+          <path d="M894 310 C881 314 872 307 874 298 C886 299 892 303 894 310Z" fill="#fcd9b4"/>
+          <path d="M866 307 C858 295 862 285 871 283 C874 294 872 302 866 307Z" fill="#fcd9b4"/>
+          <path d="M862 274 C868 262 879 261 885 268 C876 276 869 278 862 274Z" fill="#fcd9b4"/>
+        </g>
+        <circle cx="880" cy="286" r="8" fill="#fff" stroke="#d97706" stroke-width="1.5"/>
+        <text x="880" y="291" text-anchor="middle" class="compressor-m">M</text>
+        <text x="880" y="346" text-anchor="middle" class="component-name">压缩机</text>
+        <text x="880" y="361" text-anchor="middle" class="svg-tiny">空调工作电路</text>
+
+        <!-- K1-2 AC contact -->
+        <circle class="contact-dot warm" cx="710" cy="135" r="3.4"/>
+        <circle class="contact-dot warm" cx="780" cy="135" r="3.4"/>
+        <line id="blade2" class="contact-blade warm" x1="710" y1="135" x2="780" y2="135" style="transform:rotate(-28deg)"/>
+        <text x="718" y="100" class="component-label">K1-2</text>
+        <text id="k1State2" x="718" y="115" class="contact-state off">断开</text>
+        <path class="wire-thin" d="M748 126 C761 105 771 105 780 118"/>
+
+        <!-- mechanical link hint -->
+        <path d="M256 94 C300 68 346 70 400 100" fill="none" stroke="#b9cbc7" stroke-width="1.2" stroke-dasharray="4 5"/>
+        <text x="316" y="70" class="svg-tiny">机械联动</text>
+
+        <text x="880" y="466" text-anchor="middle" class="svg-small">触点闭合 → 压缩机启动</text>
+        <text x="680" y="466" class="svg-tiny">220 V 危险，实物须由教师指导</text>
+      </svg>
+    </div>
+
+    <div class="circuit-note">
+      <span class="tag">读图</span>
+      <p><b>K1-1 与 K1-2 是同一继电器的两组常开触点。</b>线圈电流达到 I₀ 时衔铁吸下，两组触点同时闭合：K1-1 把 R₀ 并入控制电路，K1-2 接通空调压缩机。控制电路只用 3V，工作电路为 220V，两者通过继电器实现电气隔离。</p>
+    </div>
+  </section>
+
+  <section class="chart-card card" id="chartCard">
+    <div class="card-head">
+      <div>
+        <span class="eyebrow">TEMPERATURE HISTORY</span>
+        <h2>温度—时间曲线</h2>
+      </div>
+      <div class="chart-legend">
+        <span><i></i>压缩机制冷区间</span>
+        <span><i class="line"></i>室温</span>
+        <span><i class="thr"></i>26 / 30℃ 阈值</span>
+      </div>
+    </div>
+    <div class="chart-box"><canvas id="chart" aria-label="温度随时间变化的曲线"></canvas></div>
+    <p class="chart-hint" id="chartHint"><b>观察：</b>蓝底表示压缩机运行。温度升到 30℃ 后启动，降到 26℃ 后停机，再升温，形成自动循环。</p>
+  </section>
+
+  <section class="section" id="principle">
+    <div class="sec-head">
+      <div class="left"><span class="dot"></span><h2>它为什么会自己开、自己停？</h2><span class="sub">四个动作，一条因果链</span></div>
+    </div>
+
+    <div class="steps">
+      <article class="step-card">
+        <span class="step-num">01</span>
+        <h3>温度升高，R₁ 变小</h3>
+        <p>NTC 热敏电阻的阻值随温度升高而减小。室温从 26℃ 升到 30℃，R₁ 从 <b>30Ω 降到 20Ω</b>。</p>
+      </article>
+      <article class="step-card">
+        <span class="step-num">02</span>
+        <h3>电流增大，衔铁吸下</h3>
+        <p>控制电路电压恒为 3V。30℃ 时 <b>I = 3V ÷ 20Ω = 0.15A</b>，正好达到吸合电流 I₀，电磁铁把衔铁吸下。</p>
+      </article>
+      <article class="step-card">
+        <span class="step-num">03</span>
+        <h3>R₀ 并入，形成正反馈</h3>
+        <p>K1-1 闭合，R₀ 与 R₁ 并联，总电阻降到 <b>15Ω</b>，电流跃升到 <b>0.20A</b>。电磁力更强，衔铁被牢牢吸住。</p>
+      </article>
+      <article class="step-card">
+        <span class="step-num">04</span>
+        <h3>降到 26℃，释放停机</h3>
+        <p>温度下降，R₁ 增大；26℃ 时 R₁=30Ω，与 R₀ 并联后恰好 <b>20Ω</b>，电流回到 0.15A。再冷一点，电流小于 I₀，衔铁释放。</p>
+      </article>
+    </div>
+
+    <div class="eq-band">
+      <div class="eq-card">
+        <div class="eq-label">30℃ · 吸合点</div>
+        <code class="eq-formula">I₀ = U / R₁(30℃) = 3V / 20Ω = 0.15A</code>
+        <p>此时 R₀ 还没有接入，控制电路里只有 R₁ 与线圈串联。</p>
+      </div>
+      <div class="eq-card warm">
+        <div class="eq-label">26℃ · 释放点</div>
+        <code class="eq-formula">R₁∥R₀ = (30Ω × 60Ω) / (30Ω + 60Ω) = 20Ω</code>
+        <p>并联总电阻回到 20Ω，电流回到 I₀；温度再低，电流不足，衔铁释放。</p>
+      </div>
+    </div>
+
+    <div class="key-note">
+      <span class="key-tag">关键一句</span>
+      <p><b>R₀ 不是加热电阻</b>，而是继电器吸合后才并入控制电路的<b>反馈电阻</b>。它让“吸合”这件事反过来改变控制电流，把释放温度从 30℃ 拉到 26℃，避免空调在 30℃ 附近频繁启停。</p>
+    </div>
+  </section>
+
+  <section class="section" id="design">
+    <div class="sec-head">
+      <div class="left"><span class="dot"></span><h2>设计说明与课堂追问</h2><span class="sub">从电路图到真实空调</span></div>
+    </div>
+
+    <div class="design-grid">
+      <div class="design-card">
+        <h3>器材与参数</h3>
+        <div class="chips">
+          <span>3V 直流电源</span><span>NTC 热敏电阻 R₁</span><span>60Ω 定值电阻 R₀</span><span>I₀=150mA 双刀继电器</span><span>220V 空调工作电路</span><span>导线与开关</span>
+        </div>
+        <p style="margin-top:10px">热敏电阻取表中特性：24℃/40Ω、26℃/30Ω、28℃/26Ω、30℃/20Ω、32℃/18Ω、34℃/15Ω；继电器线圈电阻忽略不计。</p>
+        <div class="safety"><b>安全提示：</b>右侧 220V 工作电路只做原理模拟。实物接线必须由教师指导，使用额定电压、额定电流合适的继电器，做好绝缘、接地与外壳防护；压缩机还需要专门的启动与保护电路。</div>
+      </div>
+
+      <div class="design-card">
+        <h3>整定 3 步</h3>
+        <ol class="steps-list">
+          <li><b>1</b><span>把热敏电阻放在 30℃ 环境中，测得 R₁=20Ω，选择吸合电流 I₀=U/R₁=0.15A 的继电器。</span></li>
+          <li><b>2</b><span>取 R₀=60Ω，使 26℃ 时 R₁=30Ω 与 R₀ 并联后的总电阻正好为 20Ω，即释放电流仍为 0.15A。</span></li>
+          <li><b>3</b><span>检查 30℃→26℃ 的全过程：继电器吸合后电流始终不小于 I₀；低于 26℃ 后电流小于 I₀，衔铁释放。</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="qa">
+      <details>
+        <summary>把 R₀ 换成更小的电阻，回差会变大还是变小？</summary>
+        <p>变大。R₀ 越小，并联后的总电阻越小，电流越容易保持在 I₀ 以上，继电器要到更低的温度才释放。比如 R₀=30Ω 时，释放点会明显低于 26℃；R₀ 太小甚至可能导致空调长时间不停机。</p>
+      </details>
+      <details>
+        <summary>如果 R₀ 的触点粘连，一直保持闭合，会有什么后果？</summary>
+        <p>相当于 R₀ 永久并联在 R₁ 两端。温度下降时，控制电流会比正常情况更大，继电器可能迟迟不释放，空调持续制冷，室温低于 26℃ 仍不停机。这也是实际温控器需要做触点故障保护的原因之一。</p>
+      </details>
+      <details>
+        <summary>为什么不能用 PTC 热敏电阻？</summary>
+        <p>PTC 的阻值随温度升高而增大。温度越高，控制电流反而越小，电磁铁越不容易吸合，正好与“高温启动制冷”的要求相反。所以这里要选 NTC。</p>
+      </details>
+      <details>
+        <summary>真实空调为什么还要“压缩机保护延时”？</summary>
+        <p>压缩机刚停机时内部压力尚未平衡，立即重启会造成很大冲击。实际空调控制器通常设有 3 分钟左右的延时保护。本页为了突出电磁继电器和双阈值原理，省略了这段延时。</p>
+      </details>
+    </div>
+  </section>
+
+  <footer>
+    <span><b>交互实验室</b> · 电磁继电器温控空调 · 30℃ 启动 / 26℃ 停机</span>
+    <span><a href="index.html">返回首页</a> · GitHub Pages 静态站点</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  const U = 3.0;
+  const R0 = 60;
+  const I0 = 0.15;
+  const T_START = 30;
+  const T_STOP = 26;
+  const T_MIN = 18;
+  const T_MAX = 36;
+  const MAX_CURRENT = 0.30;
+  const HEAT_K = 0.075;
+  const COOL_POWER = 1.05;
+  const RESISTANCE_POINTS = [
+    [18, 70], [20, 60], [22, 50], [24, 40], [26, 30],
+    [28, 26], [30, 20], [32, 18], [34, 15], [36, 12]
+  ];
+
+  const state = {
+    temp: 28,
+    ambient: 34,
+    relayOn: false,
+    feedback: true,
+    running: true,
+    speed: 1,
+    simTime: 0,
+    history: [],
+    events: [],
+    lastLog: -1
+  };
+
+  const els = {
+    scene: $('#scene'),
+    stateChip: $('#stateChip'),
+    tempBig: $('#tempBig'),
+    outdoor: $('#outdoor'),
+    cycleHint: $('#cycleHint'),
+    runMode: $('#runMode'),
+    roomArt: $('#roomArt'),
+    roomLabel: $('#roomLabel'),
+    ambient: $('#ambient'),
+    ambientVal: $('#ambientVal'),
+    manualTemp: $('#manualTemp'),
+    manualVal: $('#manualVal'),
+    speedSeg: $('#speedSeg'),
+    playBtn: $('#playBtn'),
+    playIcon: $('#playIcon'),
+    playText: $('#playText'),
+    resetBtn: $('#resetBtn'),
+    feedback: $('#feedback'),
+    autoChip: $('#autoChip'),
+    relayChip: $('#relayChip'),
+    currentPanel: $('#currentPanel'),
+    ratioPanel: $('#ratioPanel'),
+    iBig: $('#iBig'),
+    meterFill: $('#meterFill'),
+    meterState: $('#meterState'),
+    r1Metric: $('#r1Metric'),
+    reqMetric: $('#reqMetric'),
+    relayMetric: $('#relayMetric'),
+    relaySub: $('#relaySub'),
+    circuitSvg: $('#circuitSvg'),
+    r1Live: $('#r1Live'),
+    k1State1: $('#k1State1'),
+    k1State2: $('#k1State2'),
+    blade1: $('#blade1'),
+    blade2: $('#blade2'),
+    flowControl: $('#flowControl'),
+    flowR0: $('#flowR0'),
+    flowAc: $('#flowAc'),
+    chart: $('#chart'),
+    chartHint: $('#chartHint')
+  };
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function resistanceAt(temp) {
+    const t = clamp(temp, RESISTANCE_POINTS[0][0], RESISTANCE_POINTS[RESISTANCE_POINTS.length - 1][0]);
+    for (let i = 0; i < RESISTANCE_POINTS.length - 1; i++) {
+      const a = RESISTANCE_POINTS[i];
+      const b = RESISTANCE_POINTS[i + 1];
+      if (t <= b[0]) {
+        const ratio = (t - a[0]) / (b[0] - a[0]);
+        return a[1] + (b[1] - a[1]) * ratio;
+      }
+    }
+    return RESISTANCE_POINTS[RESISTANCE_POINTS.length - 1][1];
+  }
+
+  function circuitModel(temp, relayOn, feedback) {
+    const r1 = resistanceAt(temp);
+    const parallel = Boolean(relayOn && feedback);
+    const req = parallel ? (r1 * R0) / (r1 + R0) : r1;
+    return { r1, req, i: U / req, parallel };
+  }
+
+  function setRelay(next, record = true) {
+    if (state.relayOn === next) return;
+    state.relayOn = next;
+    if (record) {
+      state.events.push({ t: state.simTime, temp: state.temp, on: next });
+      if (state.events.length > 80) state.events.shift();
+    }
+  }
+
+  function updateRelay() {
+    const before = circuitModel(state.temp, state.relayOn, state.feedback);
+    if (!state.relayOn) {
+      if (before.i >= I0 - 1e-9) setRelay(true);
+    } else if (state.temp <= T_STOP || before.i < I0 - 1e-9) {
+      setRelay(false);
+    }
+  }
+
+  function stepSimulation(dt) {
+    const sub = Math.max(1, Math.ceil(dt / 0.018));
+    const h = dt / sub;
+    for (let n = 0; n < sub; n++) {
+      const heat = HEAT_K * (state.ambient - state.temp);
+      const cool = state.relayOn ? COOL_POWER : 0;
+      state.temp = clamp(state.temp + (heat - cool) * h, T_MIN, T_MAX);
+      updateRelay();
+    }
+  }
+
+  function logHistory(force = false) {
+    if (force || state.simTime - state.lastLog >= 0.14) {
+      state.history.push({
+        t: Number(state.simTime.toFixed(3)),
+        temp: Number(state.temp.toFixed(3)),
+        on: state.relayOn
+      });
+      state.lastLog = state.simTime;
+      if (state.history.length > 2200) state.history.shift();
+    }
+  }
+
+  function setRunning(value) {
+    state.running = Boolean(value);
+    els.playText.textContent = state.running ? '暂停' : '继续';
+    els.playIcon.textContent = state.running ? '❚❚' : '▶';
+    els.autoChip.textContent = state.running ? 'AUTO' : 'MANUAL';
+    els.autoChip.classList.toggle('manual', !state.running);
+    els.runMode.textContent = state.running ? '自动' : '已暂停';
+    if (state.running) {
+      lastFrame = performance.now();
+    }
+  }
+
+  function pauseForManual() {
+    if (state.running) setRunning(false);
+  }
+
+  function paintRange(el) {
+    const min = Number(el.min);
+    const max = Number(el.max);
+    const value = Number(el.value);
+    const p = ((value - min) / (max - min)) * 100;
+    el.style.setProperty('--p', p.toFixed(2) + '%');
+  }
+
+  function syncRange(el, value) {
+    el.value = String(value);
+    paintRange(el);
+  }
+
+  function syncControls() {
+    syncRange(els.ambient, state.ambient);
+    syncRange(els.manualTemp, state.temp);
+    els.ambientVal.textContent = state.ambient.toFixed(1) + '℃';
+    els.manualVal.textContent = state.temp.toFixed(1) + '℃';
+  }
+
+  const GAUGE = { cx: 140, cy: 145, r: 106, start: 135, end: 405 };
+
+  function polar(cx, cy, r, deg) {
+    const rad = (deg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  function gaugeAngle(temp) {
+    return GAUGE.start + ((clamp(temp, T_MIN, T_MAX) - T_MIN) / (T_MAX - T_MIN)) * (GAUGE.end - GAUGE.start);
+  }
+
+  function arcPath(startDeg, endDeg) {
+    const s = polar(GAUGE.cx, GAUGE.cy, GAUGE.r, startDeg);
+    const e = polar(GAUGE.cx, GAUGE.cy, GAUGE.r, endDeg);
+    const large = endDeg - startDeg > 180 ? 1 : 0;
+    return 'M ' + s.x.toFixed(2) + ' ' + s.y.toFixed(2) +
+      ' A ' + GAUGE.r + ' ' + GAUGE.r + ' 0 ' + large + ' 1 ' +
+      e.x.toFixed(2) + ' ' + e.y.toFixed(2);
+  }
+
+  function initGauge() {
+    $('#gaugeTrack').setAttribute('d', arcPath(GAUGE.start, GAUGE.end));
+    $('#gaugeArc').setAttribute('d', arcPath(GAUGE.start, GAUGE.end));
+    const group = $('#gaugeTicks');
+    let markup = '';
+    for (let t = T_MIN; t <= T_MAX; t += 2) {
+      const a = gaugeAngle(t);
+      const outer = polar(GAUGE.cx, GAUGE.cy, GAUGE.r + 9, a);
+      const inner = polar(GAUGE.cx, GAUGE.cy, GAUGE.r - 9, a);
+      const major = t === T_STOP || t === T_START;
+      const cls = major ? (t === T_STOP ? 'gauge-tick cool' : 'gauge-tick hot') : 'gauge-tick' + (t % 10 === 0 ? ' major' : '');
+      markup += '<line class="' + cls + '" x1="' + inner.x.toFixed(2) + '" y1="' + inner.y.toFixed(2) +
+        '" x2="' + outer.x.toFixed(2) + '" y2="' + outer.y.toFixed(2) + '"/>';
+      if (t === 18 || t === 22 || t === 26 || t === 30 || t === 34 || t === 36) {
+        const lp = polar(GAUGE.cx, GAUGE.cy, GAUGE.r + 22, a);
+        const labelCls = 'gauge-label' + (major ? (t === T_STOP ? ' threshold cool' : ' threshold hot') : '');
+        markup += '<text class="' + labelCls + '" x="' + lp.x.toFixed(2) + '" y="' + (lp.y + 3).toFixed(2) +
+          '" text-anchor="middle">' + t + '</text>';
+      }
+    }
+    group.innerHTML = markup;
+  }
+
+  function updateGauge(temp) {
+    const p = polar(GAUGE.cx, GAUGE.cy, GAUGE.r, gaugeAngle(temp));
+    $('#gaugeDot').setAttribute('cx', p.x.toFixed(2));
+    $('#gaugeDot').setAttribute('cy', p.y.toFixed(2));
+    $('#gaugeDotHalo').setAttribute('cx', p.x.toFixed(2));
+    $('#gaugeDotHalo').setAttribute('cy', p.y.toFixed(2));
+  }
+
+  function updateCycleHint() {
+    let hint = '';
+    let cls = '';
+    if (!state.feedback) {
+      hint = state.relayOn ? '单阈值模式 · 降到 30℃ 以下就释放' : '单阈值模式 · 升到 30℃ 才吸合';
+      cls = 'warn';
+    } else if (state.relayOn) {
+      const remain = Math.max(0, state.temp - T_STOP);
+      hint = '制冷中 · 再降 ' + remain.toFixed(1) + '℃ 到 26℃';
+      cls = 'on';
+    } else if (state.temp < T_START) {
+      const need = T_START - state.temp;
+      if (state.ambient <= T_START) {
+        hint = '室外不够热 · 温度升不到 30℃';
+        cls = 'warn';
+      } else {
+        hint = '升温中 · 还差 ' + need.toFixed(1) + '℃ 到 30℃';
+      }
+    } else {
+      hint = '等待再次吸合';
+    }
+    els.cycleHint.textContent = hint;
+    els.cycleHint.className = 'cycle-hint' + (cls ? ' ' + cls : '');
+  }
+
+  function updateUI() {
+    const m = circuitModel(state.temp, state.relayOn, state.feedback);
+    const currentMa = Math.round(m.i * 1000);
+    const ratio = m.i / I0;
+    const percent = clamp((m.i / MAX_CURRENT) * 100, 0, 100);
+
+    els.tempBig.textContent = state.temp.toFixed(1);
+    els.outdoor.textContent = state.ambient.toFixed(1) + '℃';
+    els.ambientVal.textContent = state.ambient.toFixed(1) + '℃';
+    els.manualVal.textContent = state.temp.toFixed(1) + '℃';
+    els.stateChip.textContent = state.relayOn ? '制冷中' : '待机';
+    els.stateChip.classList.toggle('on', state.relayOn);
+    els.scene.classList.toggle('is-on', state.relayOn);
+    els.roomArt.dataset.on = state.relayOn ? 'true' : 'false';
+    els.roomLabel.textContent = state.relayOn ? '制冷中 · 26℃ 停' : '等待 30℃';
+    els.relayChip.textContent = state.relayOn ? '吸合' : '释放';
+    els.relayMetric.textContent = state.relayOn ? '吸合' : '释放';
+    els.relaySub.textContent = state.relayOn ? 'K1-1 / K1-2 闭合' : 'K1-1 / K1-2 断开';
+    els.currentPanel.textContent = currentMa + ' mA';
+    els.iBig.textContent = String(currentMa);
+    els.ratioPanel.textContent = ratio.toFixed(2);
+    els.r1Metric.textContent = m.r1.toFixed(1) + ' Ω';
+    els.reqMetric.textContent = m.req.toFixed(1) + ' Ω';
+    els.r1Live.textContent = m.r1.toFixed(1) + ' Ω';
+    els.meterFill.style.width = percent.toFixed(2) + '%';
+    els.meterFill.classList.toggle('over', m.i >= I0);
+    els.meterState.textContent = state.relayOn
+      ? '高于 I₀ · 电磁铁吸住衔铁，触点保持闭合'
+      : (m.i >= I0 - 1e-4 ? '达到 I₀ · 正在吸合' : '低于 I₀ · 弹簧把衔铁拉住');
+    els.meterState.className = 'meter-state' + (state.relayOn ? ' on' : (m.i >= I0 - 1e-4 ? ' hot' : ''));
+
+    els.k1State1.textContent = state.relayOn ? '闭合' : '断开';
+    els.k1State2.textContent = state.relayOn ? '闭合' : '断开';
+    els.k1State1.setAttribute('class', 'contact-state' + (state.relayOn ? '' : ' off'));
+    els.k1State2.setAttribute('class', 'contact-state' + (state.relayOn ? '' : ' off'));
+    els.circuitSvg.classList.toggle('relay-on', state.relayOn);
+    els.blade1.style.transform = state.relayOn ? 'rotate(0deg)' : 'rotate(-28deg)';
+    els.blade2.style.transform = state.relayOn ? 'rotate(0deg)' : 'rotate(-28deg)';
+
+    const flowDuration = clamp(0.46 + 3.4 * (1 - clamp(m.i / 0.25, 0, 1)), 0.42, 2.3);
+    [els.flowControl, els.flowR0, els.flowAc].forEach(path => {
+      path.style.animationDuration = flowDuration.toFixed(2) + 's';
+    });
+
+    updateGauge(state.temp);
+    updateCycleHint();
+    syncControls();
+  }
+
+  let ctx = null;
+  let chartWidth = 0;
+  let chartHeight = 0;
+
+  function resizeChart() {
+    const canvas = els.chart;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    chartWidth = Math.max(320, rect.width);
+    chartHeight = Math.max(200, rect.height);
+    canvas.width = Math.round(chartWidth * dpr);
+    canvas.height = Math.round(chartHeight * dpr);
+    ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function drawChart() {
+    if (!ctx) return;
+    const w = chartWidth;
+    const h = chartHeight;
+    const pad = { l: 44, r: 54, t: 20, b: 30 };
+    const plotW = w - pad.l - pad.r;
+    const plotH = h - pad.t - pad.b;
+
+    let dataMin = 26;
+    let dataMax = 30;
+    for (const point of state.history) {
+      if (point.temp < dataMin) dataMin = point.temp;
+      if (point.temp > dataMax) dataMax = point.temp;
+    }
+    const yMin = clamp(Math.floor((dataMin - 1) / 2) * 2, 18, 22);
+    const yMax = clamp(Math.ceil((dataMax + 1) / 2) * 2, 34, 36);
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#fbfdfb';
+    ctx.fillRect(0, 0, w, h);
+
+    let tEnd = Math.max(24, state.simTime);
+    let tStart = Math.max(0, tEnd - 52);
+    if (state.simTime < 24) {
+      tStart = 0;
+      tEnd = 24;
+    }
+    const x = t => pad.l + ((t - tStart) / (tEnd - tStart)) * plotW;
+    const y = temp => pad.t + ((yMax - temp) / (yMax - yMin)) * plotH;
+
+    // thermal zones
+    ctx.fillStyle = 'rgba(234,88,12,.035)';
+    ctx.fillRect(pad.l, y(yMax), plotW, y(T_START) - y(yMax));
+    ctx.fillStyle = 'rgba(20,184,166,.045)';
+    ctx.fillRect(pad.l, y(T_START), plotW, y(T_STOP) - y(T_START));
+    ctx.fillStyle = 'rgba(37,99,235,.045)';
+    ctx.fillRect(pad.l, y(T_STOP), plotW, y(yMin) - y(T_STOP));
+
+    // grid
+    ctx.save();
+    ctx.strokeStyle = '#e8efec';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 5]);
+    for (let temp = yMin; temp <= yMax; temp += 2) {
+      const yy = y(temp);
+      ctx.beginPath();
+      ctx.moveTo(pad.l, yy);
+      ctx.lineTo(pad.l + plotW, yy);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // x grid / labels
+    ctx.save();
+    ctx.font = '10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillStyle = '#9aa8a3';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const step = 10;
+    const firstTick = Math.ceil(tStart / step) * step;
+    for (let t = firstTick; t <= tEnd; t += step) {
+      const xx = x(t);
+      ctx.strokeStyle = '#eef3f0';
+      ctx.beginPath();
+      ctx.moveTo(xx, pad.t);
+      ctx.lineTo(xx, pad.t + plotH);
+      ctx.stroke();
+      ctx.fillText(t + 's', xx, h - 20);
+    }
+    ctx.restore();
+
+    // y labels
+    ctx.save();
+    ctx.font = '10px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillStyle = '#94a39d';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let temp = yMin; temp <= yMax; temp += 4) {
+      ctx.fillText(temp + '℃', pad.l - 8, y(temp));
+    }
+    ctx.restore();
+
+    // shade compressor-on intervals
+    if (state.history.length > 1) {
+      for (let i = 1; i < state.history.length; i++) {
+        const prev = state.history[i - 1];
+        const cur = state.history[i];
+        if (!cur.on) continue;
+        const x1 = Math.max(pad.l, x(prev.t));
+        const x2 = Math.min(pad.l + plotW, x(cur.t));
+        if (x2 > x1) {
+          ctx.fillStyle = 'rgba(8,145,178,.10)';
+          ctx.fillRect(x1, pad.t, x2 - x1, plotH);
+        }
+      }
+    }
+
+    // threshold lines
+    const thresholds = [
+      { temp: T_START, label: '30 启动', color: '#ea580c' },
+      { temp: T_STOP, label: '26 停机', color: '#2563eb' }
+    ];
+    thresholds.forEach(item => {
+      const yy = y(item.temp);
+      ctx.save();
+      ctx.strokeStyle = item.color;
+      ctx.globalAlpha = .62;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(pad.l, yy);
+      ctx.lineTo(pad.l + plotW, yy);
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.font = '9px "PingFang SC","Microsoft YaHei",sans-serif';
+      ctx.fillStyle = item.color;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(item.label, pad.l + plotW + 7, yy);
+      ctx.restore();
+    });
+
+    // temperature line
+    if (state.history.length > 1) {
+      for (let i = 1; i < state.history.length; i++) {
+        const a = state.history[i - 1];
+        const b = state.history[i];
+        if (b.t < tStart || a.t > tEnd) continue;
+        const x1 = x(Math.max(a.t, tStart));
+        const y1 = y(a.temp);
+        const x2 = x(Math.min(b.t, tEnd));
+        const y2 = y(b.temp);
+        if (x2 < pad.l || x1 > pad.l + plotW) continue;
+        ctx.save();
+        ctx.strokeStyle = b.on ? '#0891b2' : '#0f766e';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // events
+    ctx.save();
+    ctx.font = '8px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    state.events.forEach(ev => {
+      if (ev.t < tStart || ev.t > tEnd) return;
+      const xx = x(ev.t);
+      const yy = y(ev.temp);
+      ctx.beginPath();
+      ctx.arc(xx, yy, 3.4, 0, Math.PI * 2);
+      ctx.fillStyle = ev.on ? '#0891b2' : '#f59e0b';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = ev.on ? '#0369a1' : '#b45309';
+      ctx.fillText(ev.on ? '启' : '停', xx, yy - 7);
+    });
+    ctx.restore();
+
+    // current point
+    if (state.history.length) {
+      const last = state.history[state.history.length - 1];
+      const xx = x(Math.min(last.t, tEnd));
+      const yy = y(last.temp);
+      if (xx >= pad.l - 1 && xx <= pad.l + plotW + 1) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(xx, yy, 8, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(8,145,178,.15)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(xx, yy, 3.6, 0, Math.PI * 2);
+        ctx.fillStyle = last.on ? '#0891b2' : '#0f766e';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // border
+    ctx.save();
+    ctx.strokeStyle = '#e1eae5';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(pad.l + .5, pad.t + .5, plotW - 1, plotH - 1);
+    ctx.restore();
+  }
+
+  function resetSimulation() {
+    state.temp = 28;
+    state.ambient = 34;
+    state.relayOn = false;
+    state.feedback = true;
+    state.speed = 1;
+    state.simTime = 0;
+    state.history = [];
+    state.events = [];
+    state.lastLog = -1;
+    els.feedback.checked = true;
+    $$('#speedSeg button').forEach(btn => btn.classList.toggle('active', btn.dataset.speed === '1'));
+    setRelay(false, false);
+    logHistory(true);
+    setRunning(true);
+    syncControls();
+    updateUI();
+    drawChart();
+  }
+
+  function setManualTemperature(value) {
+    pauseForManual();
+    state.temp = clamp(Number(value), T_MIN, T_MAX);
+    updateRelay();
+    state.simTime += 0.16;
+    logHistory(true);
+    syncControls();
+    updateUI();
+    drawChart();
+  }
+
+  function bindEvents() {
+    els.ambient.addEventListener('input', e => {
+      state.ambient = Number(e.target.value);
+      els.ambientVal.textContent = state.ambient.toFixed(1) + '℃';
+      paintRange(e.target);
+      updateUI();
+    });
+
+    els.manualTemp.addEventListener('pointerdown', pauseForManual);
+    els.manualTemp.addEventListener('input', e => setManualTemperature(e.target.value));
+
+    els.playBtn.addEventListener('click', () => {
+      setRunning(!state.running);
+      updateUI();
+    });
+
+    els.resetBtn.addEventListener('click', resetSimulation);
+
+    els.feedback.addEventListener('change', e => {
+      state.feedback = e.target.checked;
+      updateRelay();
+      logHistory(true);
+      updateUI();
+      drawChart();
+    });
+
+    els.speedSeg.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-speed]');
+      if (!btn) return;
+      state.speed = Number(btn.dataset.speed);
+      $$('#speedSeg button').forEach(item => item.classList.toggle('active', item === btn));
+    });
+
+    window.addEventListener('resize', () => {
+      resizeChart();
+      drawChart();
+    });
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(() => {
+        resizeChart();
+        drawChart();
+      }).observe(els.chart.parentElement);
+    }
+  }
+
+  let lastFrame = performance.now();
+  let lastRender = 0;
+
+  function frame(now) {
+    const realDt = Math.min((now - lastFrame) / 1000, 0.06);
+    lastFrame = now;
+
+    if (state.running) {
+      const dt = realDt * state.speed;
+      state.simTime += dt;
+      stepSimulation(dt);
+      logHistory();
+    }
+
+    if (now - lastRender > 55) {
+      updateUI();
+      lastRender = now;
+    }
+    drawChart();
+    requestAnimationFrame(frame);
+  }
+
+  initGauge();
+  resizeChart();
+  bindEvents();
+  resetSimulation();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
