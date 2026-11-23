@@ -462,11 +462,11 @@
                 <stop offset="1" stop-color="#f59e0b"/>
               </linearGradient>
             </defs>
-            <path id="gaugeTrack" class="gauge-track" d=""/>
-            <path id="gaugeArc" class="gauge-arc" d=""/>
+            <path id="gaugeTrack" class="gauge-track" d="M 65.04 219.96 A 106 106 0 1 1 214.96 219.96"/>
+            <path id="gaugeArc" class="gauge-arc" d="M 65.04 219.96 A 106 106 0 1 1 214.96 219.96"/>
             <g id="gaugeTicks"></g>
-            <circle id="gaugeDotHalo" class="gauge-dot-halo" cx="140" cy="145" r="12"/>
-            <circle id="gaugeDot" class="gauge-dot" cx="140" cy="145" r="5.5"/>
+            <circle id="gaugeDotHalo" class="gauge-dot-halo" cx="167.4" cy="42.6" r="12"/>
+            <circle id="gaugeDot" class="gauge-dot" cx="167.4" cy="42.6" r="5.5"/>
           </svg>
           <div class="gauge-center">
             <div class="temp-value"><span id="tempBig">28.0</span><sup>℃</sup></div>
@@ -538,8 +538,8 @@
 
       <div class="mini-status">
         <div><span>继电器 K1</span><b id="relayChip">释放</b></div>
-        <div><span>控制电流</span><b id="currentPanel">100 mA</b></div>
-        <div><span>电流 / I₀</span><b id="ratioPanel">0.67</b></div>
+        <div><span>控制电流</span><b id="currentPanel">115 mA</b></div>
+        <div><span>电流 / I₀</span><b id="ratioPanel">0.77</b></div>
       </div>
     </aside>
   </section>
@@ -549,12 +549,12 @@
       <div class="monitor-top">
         <div>
           <div class="monitor-label">线圈电流 I</div>
-          <div class="big-current"><span id="iBig">100</span><small>mA</small></div>
+          <div class="big-current"><span id="iBig">115</span><small>mA</small></div>
         </div>
         <div class="threshold-pill"><span>吸合阈值 I₀</span><b>150 mA</b></div>
       </div>
       <div class="meter-track">
-        <div class="meter-fill" id="meterFill"></div>
+        <div class="meter-fill" id="meterFill" style="width:38.33%"></div>
         <div class="meter-mark" aria-hidden="true"><span>I₀</span></div>
       </div>
       <div class="meter-foot"><span>0</span><span>150 mA</span><span>300 mA</span></div>
@@ -562,8 +562,8 @@
     </div>
 
     <div class="metric-grid">
-      <div class="metric"><span>R₁ 热敏电阻</span><b id="r1Metric">22.7 Ω</b><small>温度越高，阻值越小</small></div>
-      <div class="metric"><span>控制总电阻</span><b id="reqMetric">22.7 Ω</b><small>K1-1 闭合时 R₀ 并入</small></div>
+      <div class="metric"><span>R₁ 热敏电阻</span><b id="r1Metric">26.0 Ω</b><small>温度越高，阻值越小</small></div>
+      <div class="metric"><span>控制总电阻</span><b id="reqMetric">26.0 Ω</b><small>K1-1 闭合时 R₀ 并入</small></div>
       <div class="metric"><span>继电器状态</span><b id="relayMetric">释放</b><small id="relaySub">K1-1 / K1-2 断开</small></div>
       <div class="metric"><span>温度回差</span><b>4.0 ℃</b><small>30℃ 吸合 · 26℃ 释放</small></div>
     </div>
@@ -645,7 +645,7 @@
         <path d="M333 209 L341 211 L339 219" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <text x="357" y="194" class="component-name">R₁</text>
         <text x="357" y="211" class="component-label">NTC 热敏电阻</text>
-        <text id="r1Live" x="357" y="234" class="component-value">22.7 Ω</text>
+        <text id="r1Live" x="357" y="234" class="component-value">26.0 Ω</text>
         <text x="357" y="251" class="svg-tiny">t↑ 则 R₁↓</text>
 
         <!-- R0 feedback resistor -->
