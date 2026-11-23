@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<meta name="description" content="用 NTC 热敏电阻、电磁继电器和 60Ω 反馈电阻 R0 设计一台 30℃ 启动、26℃ 停机的自动空调，并用可交互网页模拟电流、衔铁、触点与压缩机的联动过程。">
+<meta name="description" content="用 NTC 热敏电阻、双刀电磁继电器和 60Ω 反馈电阻 R0 设计一台 30℃ 启动、26℃ 停机的自动空调；含可直接照接的实物接线图和可交互网页，模拟电流、衔铁、触点与压缩机的联动过程。">
 <title>30℃ 启动 · 26℃ 停机｜电磁继电器温控空调实验室</title>
 <style>
   :root{
@@ -62,6 +62,8 @@
   .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
   .pill{font-size:12px;font-weight:700;color:#5b5344;background:rgba(255,253,249,.92);border:1px solid var(--line);padding:7px 11px;border-radius:999px;box-shadow:0 4px 12px rgba(70,55,25,.03)}
   .pill i{font-style:normal;color:var(--teal);font-weight:800}
+  .hero-jump{display:inline-flex;align-items:center;gap:7px;margin-top:14px;padding:8px 12px;border-radius:10px;background:#fff;border:1px solid #dce8e4;color:#0f766e;font-size:11.5px;font-weight:800;text-decoration:none;box-shadow:0 8px 18px -14px rgba(15,118,110,.5);transition:.2s}
+  .hero-jump:hover{background:#ecfdf8;border-color:#b8e8df;transform:translateY(-1px)}
   .hero-badge{flex:none;width:190px;padding:18px 18px 16px;border-radius:24px;border:1px solid #cce9e5;background:linear-gradient(155deg,rgba(255,255,255,.92),rgba(236,253,250,.82));box-shadow:var(--shadow);text-align:center;position:relative;overflow:hidden}
   .hero-badge::before{content:"";position:absolute;inset:-40px -30px auto auto;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,#fde68a 0%,rgba(253,230,138,0) 66%)}
   .hero-badge .badge-label{position:relative;font-size:9px;font-weight:800;letter-spacing:.19em;color:#8a8170}
@@ -289,6 +291,93 @@
   .circuit-note b{color:#45635d}
   .circuit-note .tag{flex:none;font-size:9px;font-weight:800;letter-spacing:.08em;color:#0f766e;background:#e9fbf7;border:1px solid #c9f0e8;border-radius:5px;padding:2px 6px;margin-top:1px}
 
+  /* ---------- physical wiring diagram ---------- */
+  .diagram-tabs{display:inline-flex;gap:3px;padding:3px;border-radius:10px;background:#eff4f2;border:1px solid #e0e9e5;margin:1px 0 11px}
+  .diagram-tab{appearance:none;border:0;background:transparent;border-radius:7px;padding:6px 13px;font-size:11px;font-weight:800;color:#7b8985;cursor:pointer;transition:.2s}
+  .diagram-tab.active{background:#fff;color:var(--teal);box-shadow:0 2px 7px rgba(15,23,42,.09)}
+  .diagram-tab:focus-visible{outline:2px solid #2563eb;outline-offset:1px}
+  .diagram-view[hidden]{display:none!important}
+  .physical-scroll{overflow-x:auto;overflow-y:hidden;border-radius:15px;background:#fbfdfc;border:1px solid #e8efec;padding:5px}
+  .physical-svg{display:block;width:100%;min-width:1000px;height:auto}
+  .scroll-hint{display:none;margin:6px 1px 0;text-align:center;font-size:9.5px;font-weight:700;color:#9aa8a3}
+  .phys-panel-control{fill:#f7fcfb;stroke:#d9ece8;stroke-width:1.5}
+  .phys-panel-work{fill:#fffaf3;stroke:#f0dfc8;stroke-width:1.5}
+  .phys-panel-title{font-size:12px;font-weight:800;letter-spacing:.08em;fill:#55716c;font-family:inherit}
+  .phys-panel-title.work{fill:#9a5b22}
+  .phys-small{font-size:9px;font-weight:700;fill:#8b9a97;font-family:inherit}
+  .phys-tiny{font-size:8px;font-weight:700;fill:#a0adaa;font-family:inherit}
+  .phys-name{font-size:13px;font-weight:800;fill:#284b45;font-family:inherit}
+  .phys-name.work{fill:#8a4c13}
+  .phys-terminal{font-size:8px;font-weight:800;fill:#526662;font-family:inherit}
+  .phys-terminal.work{fill:#9a5b22}
+  .phys-wire-casing{fill:none;stroke:#fbfdfc;stroke-width:8.5;stroke-linecap:round;stroke-linejoin:round}
+  .phys-wire{fill:none;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1.5px 1.5px rgba(15,23,42,.14))}
+  .phys-wire.red{stroke:#dc2626}
+  .phys-wire.black{stroke:#111827}
+  .phys-wire.blue{stroke:#2563eb}
+  .phys-wire.purple{stroke:#7c3aed}
+  .phys-wire.brown{stroke:#b45309}
+  .phys-wire.neutral{stroke:#0284c7}
+  .phys-wire.earth{stroke:#65a30d}
+  .phys-wire-label{font-size:8.5px;font-weight:800;fill:#64748b;font-family:inherit}
+  .phys-wire-label.red{fill:#b91c1c}
+  .phys-wire-label.blue{fill:#1d4ed8}
+  .phys-wire-label.purple{fill:#6d28d9}
+  .phys-wire-label.brown{fill:#92400e}
+  .phys-wire-label.earth{fill:#4d7c0f}
+  .phys-component{filter:url(#physShadow)}
+  .phys-relay-case{fill:url(#relayCaseGrad);stroke:#2563eb;stroke-width:2.8}
+  .phys-coil{fill:url(#copperGrad);stroke:#b45309;stroke-width:1.5}
+  .phys-coil-line{fill:none;stroke:#fef3c7;stroke-width:1.4;opacity:.8}
+  .phys-core{fill:#64748b;stroke:#475569;stroke-width:1.2}
+  .phys-armature{fill:#94a3b8;stroke:#475569;stroke-width:1.4}
+  .phys-contact{fill:#f59e0b;stroke:#92400e;stroke-width:1}
+  .phys-blade{stroke:#64748b;stroke-width:4.5;stroke-linecap:round;transform-box:view-box;transition:transform .24s cubic-bezier(.3,1.4,.5,1)}
+  #physBlade1{transform-origin:445px 500px;transform:rotate(-22deg)}
+  #physBlade2{transform-origin:570px 300px;transform:rotate(-28deg)}
+  .physical-svg.relay-on #physBlade1,.physical-svg.relay-on #physBlade2{transform:rotate(0deg)}
+  #physArmature{transition:transform .24s cubic-bezier(.3,1.4,.5,1)}
+  .physical-svg.relay-on #physArmature{transform:translateY(10px)}
+  .phys-coil-glow{fill:url(#coilGlowGrad);opacity:0;transition:opacity .25s}
+  .physical-svg.relay-on .phys-coil-glow{opacity:1}
+  .phys-state{font-size:9px;font-weight:800;fill:#64748b;font-family:inherit}
+  .physical-svg.relay-on .phys-state{fill:#0f766e}
+  .phys-screw{fill:#e2e8f0;stroke:#64748b;stroke-width:1.2}
+  .phys-screw-slot{fill:none;stroke:#64748b;stroke-width:1.1;stroke-linecap:round}
+  .phys-battery{fill:url(#batteryGrad);stroke:#334155;stroke-width:1.6}
+  .phys-battery-cell{fill:#1e293b;stroke:#0f172a;stroke-width:1}
+  .phys-ntc-body{fill:#e8eef0;stroke:#64748b;stroke-width:1.4}
+  .phys-ntc-tip{fill:#94a3b8;stroke:#475569;stroke-width:1.2}
+  .phys-ntc-bead{fill:#0f766e;stroke:#115e59;stroke-width:1.2}
+  .phys-connector{fill:#f59e0b;stroke:#b45309;stroke-width:1.3}
+  .phys-connector-screw{fill:#fffbeb;stroke:#92400e;stroke-width:1}
+  .phys-resistor{fill:#f5e6c8;stroke:#a16207;stroke-width:1.4}
+  .phys-band{stroke:#b45309;stroke-width:5}
+  .phys-band.dark{stroke:#7c2d12}
+  .phys-plug{fill:#f8fafc;stroke:#64748b;stroke-width:1.5}
+  .phys-prong{stroke:#94a3b8;stroke-width:5;stroke-linecap:round}
+  .phys-ac-body{fill:url(#acBodyGrad);stroke:#94a3b8;stroke-width:1.6}
+  .phys-ac-grille{fill:none;stroke:#cbd5e1;stroke-width:1.4}
+  .phys-ac-fan{transform-box:fill-box;transform-origin:center}
+  .physical-svg.relay-on .phys-ac-fan{animation:fan 1.3s linear infinite}
+  .phys-termblock{fill:#fff7ed;stroke:#d97706;stroke-width:1.3}
+  .phys-led{fill:#cbd5e1;stroke:#94a3b8;stroke-width:1}
+  .physical-svg.relay-on .phys-led{fill:#22c55e;stroke:#15803d;filter:url(#ledGlow)}
+  .phys-warning{fill:#fff7ed;stroke:#f59e0b;stroke-width:1.3}
+  .phys-warning-text{font-size:9px;font-weight:800;fill:#b45309;font-family:inherit}
+  .wire-key{display:flex;gap:6px 12px;flex-wrap:wrap;align-items:center;margin:10px 0 0;padding:8px 10px;border-radius:9px;background:#f8fbf9;border:1px solid #e6eeea;font-size:9.5px;font-weight:700;color:#6f7f7b}
+  .wire-key span{display:inline-flex;align-items:center;gap:5px}
+  .wire-key i{width:18px;height:3px;border-radius:2px;background:#64748b;flex:none}
+  .wire-key .red{background:#dc2626}.wire-key .black{background:#111827}.wire-key .blue{background:#2563eb}.wire-key .purple{background:#7c3aed}.wire-key .brown{background:#b45309}.wire-key .neutral{background:#0284c7}.wire-key .earth{background:#65a30d}
+  .wiring-download-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px}
+  .wiring-download{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;background:#fff;border:1px solid #d4e6e1;color:#0f766e;font-size:10px;font-weight:800;text-decoration:none;transition:.2s}
+  .wiring-download:hover{background:#ecfdf8;border-color:#b8e8df}
+  .wiring-download-row span{font-size:9.5px;color:#9aa8a3}
+  .wiring-check{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px;margin-top:9px;padding:11px 12px;border-radius:11px;background:#fbfdfb;border:1px dashed #d8e6e1;font-size:10px;line-height:1.65;color:#74837f}
+  .wiring-check b{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#e9fbf7;color:#0f766e;font-size:8.5px;font-weight:800;margin-right:5px;vertical-align:1px}
+  .wiring-check .step{display:flex;align-items:flex-start;gap:0}
+  .wiring-check .step span{min-width:0}
+
   /* ---------- chart ---------- */
   .chart-card{padding:20px 22px 16px;margin-top:18px}
   .chart-box{position:relative;height:286px;border-radius:14px;background:#fbfdfb;border:1px solid #e8efec;overflow:hidden}
@@ -387,6 +476,8 @@
     .monitor{margin-top:14px}
     .metric-grid{grid-template-columns:1fr 1fr}
     .circuit-card,.chart-card{padding:17px 15px 15px}
+    .scroll-hint{display:block}
+    .wiring-check{grid-template-columns:1fr}
     .eq-band,.design-grid{grid-template-columns:1fr}
     .steps{grid-template-columns:1fr 1fr}
     .chart-box{height:240px}
@@ -434,7 +525,9 @@
         <span class="pill"><i>I₀</i> = 150 mA</span>
         <span class="pill"><i>R₀</i> = 60 Ω 反馈</span>
         <span class="pill"><i>4℃</i> 温度回差</span>
+        <span class="pill"><i>实物</i> 接线图</span>
       </div>
+      <a class="hero-jump" href="#circuit">↓ 直接看实物接线图</a>
     </div>
     <div class="hero-badge" aria-hidden="true">
       <div class="badge-label">DEAD BAND</div>
@@ -572,16 +665,322 @@
   <section class="circuit-card card section" id="circuit">
     <div class="card-head">
       <div>
-        <span class="eyebrow">SCHEMATIC</span>
-        <h2>控制电路与工作电路</h2>
+        <span class="eyebrow">WIRING &amp; SCHEMATIC</span>
+        <h2>实物接线图 / 原理图</h2>
       </div>
       <div class="legend" aria-label="图例">
         <span><i></i>导线</span>
-        <span><i class="dash"></i>电流方向</span>
+        <span><i class="dash"></i>电流方向（原理图）</span>
         <span><i class="ac"></i>220V 工作电路</span>
       </div>
     </div>
 
+    <div class="diagram-tabs" role="tablist" aria-label="接线图切换">
+      <button class="diagram-tab active" type="button" data-view="physical" role="tab" aria-selected="true">实物接线图</button>
+      <button class="diagram-tab" type="button" data-view="schematic" role="tab" aria-selected="false">原理图</button>
+    </div>
+
+    <div id="physicalView" class="diagram-view">
+      <div class="physical-scroll">
+        <svg id="physicalSvg" class="physical-svg" viewBox="0 0 1160 720" role="img" aria-labelledby="physTitle physDesc">
+          <title id="physTitle">电磁继电器空调实物接线图</title>
+          <desc id="physDesc">左侧为 3V 控制回路：电池盒、NTC 热敏电阻、60 欧反馈电阻 R0、双刀电磁继电器线圈与 K1-1 触点，通过 J1、J2 两个接线节点连接。右侧为 220V 工作回路：三孔插头、K1-2 触点、空调压缩机，火线经过 K1-2，零线和地线直接连接。</desc>
+          <defs>
+            <linearGradient id="relayCaseGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#eff8ff"/>
+              <stop offset=".55" stop-color="#dbeafe"/>
+              <stop offset="1" stop-color="#eff6ff"/>
+            </linearGradient>
+            <linearGradient id="copperGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#b45309"/>
+              <stop offset=".25" stop-color="#f59e0b"/>
+              <stop offset=".55" stop-color="#fcd34d"/>
+              <stop offset=".8" stop-color="#d97706"/>
+              <stop offset="1" stop-color="#92400e"/>
+            </linearGradient>
+            <radialGradient id="coilGlowGrad" cx=".5" cy=".5" r=".55">
+              <stop offset="0" stop-color="#f59e0b" stop-opacity=".48"/>
+              <stop offset="1" stop-color="#f59e0b" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="batteryGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#e2e8f0"/>
+              <stop offset="1" stop-color="#cbd5e1"/>
+            </linearGradient>
+            <linearGradient id="acBodyGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#ffffff"/>
+              <stop offset="1" stop-color="#eef4f6"/>
+            </linearGradient>
+            <filter id="physShadow" x="-20%" y="-20%" width="140%" height="150%">
+              <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#1f2937" flood-opacity=".13"/>
+            </filter>
+            <filter id="ledGlow" x="-120%" y="-120%" width="340%" height="340%">
+              <feGaussianBlur stdDeviation="3" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <rect class="phys-panel-control" x="16" y="16" width="646" height="688" rx="20"/>
+          <rect class="phys-panel-work" x="678" y="16" width="466" height="688" rx="20"/>
+          <text x="40" y="48" class="phys-panel-title">控制回路 · 3V 安全电压</text>
+          <text x="700" y="48" class="phys-panel-title work">工作回路 · 220V 危险</text>
+          <line x1="666" y1="30" x2="666" y2="690" stroke="#d6e3df" stroke-width="1.4" stroke-dasharray="6 6"/>
+
+          <!-- control wires -->
+          <g>
+            <path class="phys-wire-casing" d="M225 580 H250 V370 H330"/>
+            <path class="phys-wire red" d="M225 580 H250 V370 H330"/>
+            <text x="236" y="570" class="phys-wire-label red">＋3V</text>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M140 315 H82 V505 H260"/>
+            <path class="phys-wire blue" d="M140 315 H82 V505 H260"/>
+            <text x="90" y="341" class="phys-wire-label blue">R₁ → J1</text>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M160 315 H38 V696 H310 V666 H296"/>
+            <path class="phys-wire black" d="M160 315 H38 V696 H310 V666 H296"/>
+            <text x="48" y="620" class="phys-wire-label">0V</text>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M330 420 H294 V487"/>
+            <path class="phys-wire blue" d="M330 420 H294 V487"/>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M328 505 V565 H445"/>
+            <path class="phys-wire blue" d="M328 505 V565 H445"/>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M535 565 H565 V585"/>
+            <path class="phys-wire purple" d="M535 565 H565 V585"/>
+            <text x="540" y="587" class="phys-wire-label purple">R₀</text>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M565 665 H296"/>
+            <path class="phys-wire black" d="M565 665 H296"/>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M225 635 H200 V666 H228"/>
+            <path class="phys-wire black" d="M225 635 H200 V666 H228"/>
+          </g>
+
+          <!-- 220V wires -->
+          <g>
+            <path class="phys-wire-casing" d="M790 150 V210 H700 V300 H645"/>
+            <path class="phys-wire brown" d="M790 150 V210 H700 V300 H645"/>
+            <text x="704" y="236" class="phys-wire-label brown">L</text>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M645 350 H700 V560 H908"/>
+            <path class="phys-wire brown" d="M645 350 H700 V560 H908"/>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M815 150 V600 H908"/>
+            <path class="phys-wire neutral" d="M815 150 V600 H908"/>
+            <text x="821" y="584" class="phys-wire-label" fill="#0369a1">N</text>
+          </g>
+          <g>
+            <path class="phys-wire-casing" d="M840 150 V640 H908"/>
+            <path class="phys-wire earth" d="M840 150 V640 H908"/>
+            <text x="846" y="628" class="phys-wire-label earth">PE</text>
+          </g>
+
+          <!-- battery pack -->
+          <g class="phys-component">
+            <rect class="phys-battery" x="55" y="560" width="170" height="100" rx="16"/>
+            <rect class="phys-battery-cell" x="72" y="575" width="64" height="70" rx="9"/>
+            <rect class="phys-battery-cell" x="144" y="575" width="64" height="70" rx="9"/>
+            <path d="M84 575 v70 M156 575 v70" stroke="#475569" stroke-width="2"/>
+            <text x="140" y="548" text-anchor="middle" class="phys-name">3V 电池盒</text>
+            <circle cx="225" cy="580" r="7" fill="#dc2626" stroke="#fff" stroke-width="2"/>
+            <circle cx="225" cy="635" r="7" fill="#111827" stroke="#fff" stroke-width="2"/>
+            <text x="239" y="584" class="phys-terminal">＋</text>
+            <text x="239" y="639" class="phys-terminal">−</text>
+          </g>
+
+          <!-- NTC probe -->
+          <g class="phys-component">
+            <path d="M150 160 V135" stroke="#64748b" stroke-width="4" stroke-linecap="round"/>
+            <rect class="phys-ntc-body" x="131" y="160" width="38" height="72" rx="11"/>
+            <rect class="phys-ntc-tip" x="140" y="230" width="20" height="30" rx="5"/>
+            <circle class="phys-ntc-bead" cx="150" cy="266" r="9"/>
+            <text x="186" y="178" class="phys-name">NTC 热敏电阻 R₁</text>
+            <text x="186" y="195" class="phys-small">探头放在室内，t↑ 则 R₁↓</text>
+            <rect class="phys-connector" x="118" y="300" width="64" height="30" rx="8"/>
+            <circle class="phys-connector-screw" cx="140" cy="315" r="5"/>
+            <circle class="phys-connector-screw" cx="160" cy="315" r="5"/>
+            <path d="M147 275 L140 300 M153 275 L160 300" stroke="#64748b" stroke-width="2.4" fill="none"/>
+            <text x="188" y="319" class="phys-terminal">NTC 端子</text>
+          </g>
+
+          <!-- J1 -->
+          <g class="phys-component">
+            <rect class="phys-connector" x="260" y="487" width="68" height="36" rx="9"/>
+            <circle class="phys-connector-screw" cx="272" cy="505" r="5"/>
+            <circle class="phys-connector-screw" cx="294" cy="505" r="5"/>
+            <circle class="phys-connector-screw" cx="316" cy="505" r="5"/>
+            <text x="294" y="539" text-anchor="middle" class="phys-terminal">J1 三通节点</text>
+          </g>
+
+          <!-- J2 -->
+          <g class="phys-component">
+            <rect class="phys-connector" x="228" y="650" width="68" height="32" rx="9"/>
+            <circle class="phys-connector-screw" cx="240" cy="666" r="5"/>
+            <circle class="phys-connector-screw" cx="262" cy="666" r="5"/>
+            <circle class="phys-connector-screw" cx="284" cy="666" r="5"/>
+            <text x="262" y="645" text-anchor="middle" class="phys-terminal">J2 0V 节点</text>
+          </g>
+
+          <!-- R0 -->
+          <g class="phys-component">
+            <line x1="565" y1="565" x2="565" y2="585" stroke="#94a3b8" stroke-width="3"/>
+            <rect class="phys-resistor" x="545" y="585" width="40" height="80" rx="9"/>
+            <line class="phys-band" x1="547" y1="601" x2="583" y2="601"/>
+            <line class="phys-band dark" x1="547" y1="616" x2="583" y2="616"/>
+            <line class="phys-band" x1="547" y1="631" x2="583" y2="631"/>
+            <line x1="565" y1="665" x2="565" y2="678" stroke="#94a3b8" stroke-width="3"/>
+            <text x="600" y="616" class="phys-name">R₀ 60Ω</text>
+            <text x="600" y="633" class="phys-small">反馈电阻</text>
+          </g>
+
+          <!-- relay -->
+          <g class="phys-component">
+            <rect class="phys-relay-case" x="340" y="100" width="290" height="450" rx="22"/>
+            <text x="485" y="130" text-anchor="middle" class="phys-name">电磁继电器 K1</text>
+            <text x="485" y="147" text-anchor="middle" class="phys-tiny">双刀 · 线圈 3V · 触点 220V 额定</text>
+            <text id="physRelayState" x="485" y="166" text-anchor="middle" class="phys-state">释放 · 两组触点断开</text>
+
+            <ellipse class="phys-coil-glow" cx="404" cy="405" rx="76" ry="84"/>
+
+            <rect class="phys-coil" x="365" y="345" width="78" height="120" rx="13"/>
+            <path class="phys-coil-line" d="M374 353 v104 M390 353 v104 M406 353 v104 M422 353 v104 M438 353 v104"/>
+            <ellipse cx="404" cy="345" rx="39" ry="7" fill="#fcd34d" stroke="#b45309" stroke-width="1"/>
+            <text x="404" y="488" text-anchor="middle" class="phys-small">线圈 3V</text>
+
+            <rect class="phys-core" x="405" y="210" width="18" height="145" rx="4"/>
+
+            <g id="physArmature">
+              <rect class="phys-armature" x="360" y="200" width="250" height="12" rx="6"/>
+              <circle cx="366" cy="206" r="5" fill="#64748b" stroke="#334155" stroke-width="1"/>
+              <path d="M362 200 L340 177 L330 187 L318 167" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+
+            <path d="M480 212 V477" stroke="#94a3b8" stroke-width="5" stroke-linecap="round" opacity=".45"/>
+
+            <!-- K1-1 -->
+            <circle class="phys-contact" cx="445" cy="500" r="6"/>
+            <circle class="phys-contact" cx="535" cy="500" r="6"/>
+            <line id="physBlade1" class="phys-blade" x1="445" y1="500" x2="535" y2="500"/>
+            <path d="M445 500 V565 M535 500 V565" fill="none" stroke="#64748b" stroke-width="2.2"/>
+            <text x="490" y="529" text-anchor="middle" class="phys-terminal">K1-1 · 控制 R₀</text>
+
+            <!-- K1-2 -->
+            <circle class="phys-contact" cx="570" cy="300" r="6"/>
+            <circle class="phys-contact" cx="615" cy="300" r="6"/>
+            <line id="physBlade2" class="phys-blade" x1="570" y1="300" x2="615" y2="300"/>
+            <path d="M570 300 H630 M615 300 H630 V350 H630" fill="none" stroke="#64748b" stroke-width="2.2"/>
+            <text x="596" y="252" text-anchor="middle" class="phys-terminal">K1-2</text>
+            <text x="596" y="267" text-anchor="middle" class="phys-tiny">控制 220V L 线</text>
+            <path d="M495 212 L490 490 M520 212 L585 288" fill="none" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="4 5"/>
+
+            <!-- relay terminal screws -->
+            <circle class="phys-screw" cx="330" cy="370" r="9"/>
+            <path class="phys-screw-slot" d="M324 370 H336"/>
+            <circle class="phys-screw" cx="330" cy="420" r="9"/>
+            <path class="phys-screw-slot" d="M324 420 H336"/>
+            <text x="316" y="374" text-anchor="end" class="phys-terminal">A</text>
+            <text x="316" y="424" text-anchor="end" class="phys-terminal">B</text>
+
+            <circle class="phys-screw" cx="445" cy="565" r="9"/>
+            <path class="phys-screw-slot" d="M439 565 H451"/>
+            <circle class="phys-screw" cx="535" cy="565" r="9"/>
+            <path class="phys-screw-slot" d="M529 565 H541"/>
+            <text x="445" y="548" text-anchor="middle" class="phys-terminal">COM1</text>
+            <text x="535" y="548" text-anchor="middle" class="phys-terminal">NO1</text>
+
+            <circle class="phys-screw" cx="645" cy="300" r="9"/>
+            <path class="phys-screw-slot" d="M639 300 H651"/>
+            <circle class="phys-screw" cx="645" cy="350" r="9"/>
+            <path class="phys-screw-slot" d="M639 350 H651"/>
+            <text x="645" y="286" text-anchor="middle" class="phys-terminal work">COM2</text>
+            <text x="645" y="336" text-anchor="middle" class="phys-terminal work">NO2</text>
+
+            <text x="330" y="451" text-anchor="middle" class="phys-tiny">线圈端子</text>
+          </g>
+
+          <!-- 3-pin plug -->
+          <g class="phys-component">
+            <path class="phys-prong" d="M785 68 V84 M810 68 V84 M835 68 V84"/>
+            <rect class="phys-plug" x="762" y="82" width="106" height="70" rx="16"/>
+            <circle cx="790" cy="116" r="4" fill="#cbd5e1"/>
+            <circle cx="815" cy="116" r="4" fill="#cbd5e1"/>
+            <circle cx="840" cy="116" r="4" fill="#cbd5e1"/>
+            <text x="884" y="105" class="phys-name work">三孔插头</text>
+            <text x="884" y="121" class="phys-tiny">220V · L / N / PE</text>
+          </g>
+
+          <!-- air conditioner -->
+          <g class="phys-component">
+            <rect class="phys-ac-body" x="930" y="300" width="160" height="330" rx="20"/>
+            <circle cx="1010" cy="392" r="45" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+            <g class="phys-ac-fan">
+              <path d="M1010 355 C1024 365 1021 380 1012 386 C1003 373 1000 363 1010 355Z" fill="#bae6fd"/>
+              <path d="M1040 380 C1037 397 1025 400 1016 393 C1026 380 1034 375 1040 380Z" fill="#bae6fd"/>
+              <path d="M1030 417 C1014 421 1004 413 1007 402 C1021 403 1028 408 1030 417Z" fill="#bae6fd"/>
+              <path d="M991 413 C982 399 987 387 998 385 C1001 398 999 408 991 413Z" fill="#bae6fd"/>
+              <path d="M982 373 C989 359 1002 358 1009 367 C998 376 990 379 982 373Z" fill="#bae6fd"/>
+            </g>
+            <circle cx="1010" cy="392" r="7" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+            <text x="1010" y="474" text-anchor="middle" class="phys-name work">空调压缩机</text>
+            <text x="1010" y="491" text-anchor="middle" class="phys-tiny">运行时风扇转动</text>
+            <circle id="physAcLed" class="phys-led" cx="1058" cy="326" r="5"/>
+            <text x="1058" y="343" text-anchor="middle" class="phys-tiny">运行</text>
+            <path d="M950 550 H1070 M950 570 H1070 M950 590 H1070" class="phys-ac-grille"/>
+
+            <rect class="phys-termblock" x="888" y="540" width="40" height="122" rx="9"/>
+            <circle class="phys-screw" cx="908" cy="560" r="8"/>
+            <path class="phys-screw-slot" d="M902 560 H914"/>
+            <circle class="phys-screw" cx="908" cy="600" r="8"/>
+            <path class="phys-screw-slot" d="M902 600 H914"/>
+            <circle class="phys-screw" cx="908" cy="640" r="8"/>
+            <path class="phys-screw-slot" d="M902 640 H914"/>
+            <text x="908" y="580" text-anchor="middle" class="phys-terminal work">L</text>
+            <text x="908" y="620" text-anchor="middle" class="phys-terminal work">N</text>
+            <text x="908" y="660" text-anchor="middle" class="phys-terminal work">PE</text>
+            <path d="M928 560 H930 M928 600 H930 M928 640 H930" fill="none" stroke="#b45309" stroke-width="2"/>
+          </g>
+
+          <!-- warnings and labels -->
+          <g>
+            <rect class="phys-warning" x="1032" y="88" width="88" height="24" rx="7"/>
+            <text x="1076" y="104" text-anchor="middle" class="phys-warning-text">⚠ 220V 危险</text>
+          </g>
+        </svg>
+      </div>
+      <p class="scroll-hint">← 左右滑动查看完整实物接线图 →</p>
+
+      <div class="wire-key" aria-label="导线颜色说明">
+        <span><i class="red"></i>＋3V</span>
+        <span><i class="black"></i>0V</span>
+        <span><i class="blue"></i>J1 控制节点</span>
+        <span><i class="purple"></i>R₀ 反馈支路</span>
+        <span><i class="brown"></i>火线 L</span>
+        <span><i class="neutral"></i>零线 N</span>
+        <span><i class="earth"></i>地线 PE</span>
+      </div>
+      <div class="wiring-download-row">
+        <a class="wiring-download" href="preview-aircon-wiring.png" download>下载实物接线图（PNG）</a>
+        <span>可打印，方便课堂照图接线</span>
+      </div>
+
+      <div class="wiring-check" aria-label="实物接线核对">
+        <div class="step"><b>01</b><span>3V 电池正极 → 线圈 A；线圈 B → J1。</span></div>
+        <div class="step"><b>02</b><span>J1 → NTC → 电池负极；J1 → K1-1 COM1，NO1 → R₀ → 电池负极。</span></div>
+        <div class="step"><b>03</b><span>220V 火线 L → K1-2 COM2；NO2 → 空调 L。零线 N、地线 PE 直接接空调。</span></div>
+        <div class="step"><b>04</b><span>K1-1 与 K1-2 是同一只双刀继电器的两组触点，机械联动；控制线与 220V 线不得共线。</span></div>
+      </div>
+    </div>
+
+    <div id="schematicView" class="diagram-view" hidden>
     <div class="circuit-scroll">
       <svg id="circuitSvg" class="circuit-svg" viewBox="0 0 1040 520" role="img" aria-labelledby="circuitTitle circuitDesc">
         <title id="circuitTitle">电磁继电器空调控制电路</title>
@@ -711,10 +1110,11 @@
         <text x="680" y="466" class="svg-tiny">220 V 危险，实物须由教师指导</text>
       </svg>
     </div>
+    </div>
 
     <div class="circuit-note">
       <span class="tag">读图</span>
-      <p><b>K1-1 与 K1-2 是同一继电器的两组常开触点。</b>线圈电流达到 I₀ 时衔铁吸下，两组触点同时闭合：K1-1 把 R₀ 并入控制电路，K1-2 接通空调压缩机。控制电路只用 3V，工作电路为 220V，两者通过继电器实现电气隔离。</p>
+      <p><b>先按“实物接线图”接线，再看“原理图”理解控制过程。</b>K1-1 与 K1-2 是同一只双刀继电器的两组常开触点：线圈电流达到 I₀ 时衔铁吸下，K1-1 把 R₀ 并入控制电路，K1-2 接通 220V 空调火线。控制电路只用 3V，工作电路为 220V，两者必须通过继电器实现电气隔离，导线不得共用。</p>
     </div>
   </section>
 
@@ -790,9 +1190,9 @@
       <div class="design-card">
         <h3>器材与参数</h3>
         <div class="chips">
-          <span>3V 直流电源</span><span>NTC 热敏电阻 R₁</span><span>60Ω 定值电阻 R₀</span><span>I₀=150mA 双刀继电器</span><span>220V 空调工作电路</span><span>导线与开关</span>
+          <span>3V 直流电源</span><span>NTC 热敏电阻 R₁</span><span>60Ω 定值电阻 R₀</span><span>双刀电磁继电器（2组常开）</span><span>220V 空调工作电路</span><span>导线、插头与接线端子</span>
         </div>
-        <p style="margin-top:10px">热敏电阻取表中特性：24℃/40Ω、26℃/30Ω、28℃/26Ω、30℃/20Ω、32℃/18Ω、34℃/15Ω；继电器线圈电阻忽略不计。</p>
+        <p style="margin-top:10px">热敏电阻取表中特性：24℃/40Ω、26℃/30Ω、28℃/26Ω、30℃/20Ω、32℃/18Ω、34℃/15Ω；继电器线圈电阻忽略不计。实物接线时用同一只双刀继电器：K1-1 接 R₀ 支路，K1-2 接 220V 火线，两组触点由同一衔铁带动。</p>
         <div class="safety"><b>安全提示：</b>右侧 220V 工作电路只做原理模拟。实物接线必须由教师指导，使用额定电压、额定电流合适的继电器，做好绝缘、接地与外壳防护；压缩机还需要专门的启动与保护电路。</div>
       </div>
 
@@ -801,7 +1201,7 @@
         <ol class="steps-list">
           <li><b>1</b><span>把热敏电阻放在 30℃ 环境中，测得 R₁=20Ω，选择吸合电流 I₀=U/R₁=0.15A 的继电器。</span></li>
           <li><b>2</b><span>取 R₀=60Ω，使 26℃ 时 R₁=30Ω 与 R₀ 并联后的总电阻正好为 20Ω，即释放电流仍为 0.15A。</span></li>
-          <li><b>3</b><span>检查 30℃→26℃ 的全过程：继电器吸合后电流始终不小于 I₀；低于 26℃ 后电流小于 I₀，衔铁释放。</span></li>
+          <li><b>3</b><span>按实物图接线：J1 接 NTC 与 K1-1 COM1；K1-1 NO1 接 R₀；220V 火线只经过 K1-2，零线和地线直接接空调。检查 30℃→26℃ 全过程电流始终不小于 I₀，低于 26℃ 后电流小于 I₀，衔铁释放。</span></li>
         </ol>
       </div>
     </div>
@@ -898,6 +1298,8 @@
     relayMetric: $('#relayMetric'),
     relaySub: $('#relaySub'),
     circuitSvg: $('#circuitSvg'),
+    physicalSvg: $('#physicalSvg'),
+    physRelayState: $('#physRelayState'),
     r1Live: $('#r1Live'),
     k1State1: $('#k1State1'),
     k1State2: $('#k1State2'),
@@ -1123,6 +1525,8 @@
     els.k1State1.setAttribute('class', 'contact-state' + (state.relayOn ? '' : ' off'));
     els.k1State2.setAttribute('class', 'contact-state' + (state.relayOn ? '' : ' off'));
     els.circuitSvg.classList.toggle('relay-on', state.relayOn);
+    els.physicalSvg.classList.toggle('relay-on', state.relayOn);
+    if (els.physRelayState) els.physRelayState.textContent = state.relayOn ? '吸合 · 两组触点闭合' : '释放 · 两组触点断开';
     els.blade1.style.transform = state.relayOn ? 'rotate(0deg)' : 'rotate(-28deg)';
     els.blade2.style.transform = state.relayOn ? 'rotate(0deg)' : 'rotate(-28deg)';
 
@@ -1412,6 +1816,20 @@
       if (!btn) return;
       state.speed = Number(btn.dataset.speed);
       $$('#speedSeg button').forEach(item => item.classList.toggle('active', item === btn));
+    });
+
+    const diagramTabs = $$('.diagram-tab');
+    diagramTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const view = tab.dataset.view;
+        diagramTabs.forEach(item => {
+          const active = item === tab;
+          item.classList.toggle('active', active);
+          item.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        $('#physicalView').hidden = view !== 'physical';
+        $('#schematicView').hidden = view !== 'schematic';
+      });
     });
 
     window.addEventListener('resize', () => {
