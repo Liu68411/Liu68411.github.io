@@ -35,6 +35,7 @@ const state = {
     points: []
   },
   functions: [],
+  sharedParams: {},
   activeFnId: null,
   curve: null,
   conicType: 'circle',
@@ -2120,6 +2121,7 @@ function captureSnapshot() {
     mode: state.mode,
     tab: state.tab,
     functions: state.functions.map(f => ({ id: f.id, expr: f.expr, color: f.color, visible: f.visible, params: cloneData(f.params) })),
+    sharedParams: cloneData(state.sharedParams),
     activeFnId: state.activeFnId,
     curve: cloneData(state.curve),
     conicResult: cloneData(state.conicResult),
@@ -2139,6 +2141,7 @@ function captureSnapshot() {
 function applySnapshot(snap) {
   try {
     const s = typeof snap === 'string' ? JSON.parse(snap) : snap;
+    state.sharedParams = s.sharedParams && typeof s.sharedParams === 'object' ? cloneData(s.sharedParams) : {};
     const fns = [];
     for (const f of (s.functions || [])) {
       if (!f || typeof f.expr !== 'string') continue;
@@ -2147,6 +2150,7 @@ function applySnapshot(snap) {
       } catch { /* skip broken */ }
     }
     state.functions = fns;
+    syncAllParams();
     state.activeFnId = fns.some(f => f.id === s.activeFnId) ? s.activeFnId : (fns[0] ? fns[0].id : null);
     state.curve = cloneData(s.curve) || null;
     state.conicResult = cloneData(s.conicResult) || null;
@@ -4293,13 +4297,16 @@ function buildFunctionRecord({ id, expr, color, visible, params }) {
   const names = collectParams(baseAst);
   const saved = Array.isArray(params) ? params : [];
   const defs = names.map(name => {
+    if (state.sharedParams[name]) return { ...state.sharedParams[name] };
     const old = saved.find(p => p && p.name === name) || {};
     let min = Number.isFinite(old.min) ? old.min : -5;
     let max = Number.isFinite(old.max) ? old.max : 5;
     if (min >= max) { min = -5; max = 5; }
     const step = Number.isFinite(old.step) && old.step > 0 ? old.step : 0.1;
     const value = clamp(Number.isFinite(old.value) ? old.value : 1, min, max);
-    return { name, min, max, step, value };
+    const def = { name, min, max, step, value };
+    state.sharedParams[name] = { ...def };
+    return def;
   });
   const values = {};
   defs.forEach(p => { values[p.name] = p.value; });
@@ -4307,6 +4314,38 @@ function buildFunctionRecord({ id, expr, color, visible, params }) {
     id: id || uid('f'), expr, baseAst, params: defs,
     ast: substituteParams(baseAst, values), color, visible: visible !== false
   };
+}
+
+function recomputeFunctionAst(fn) {
+  if (!fn || !fn.baseAst || !Array.isArray(fn.params)) return;
+  const values = {};
+  fn.params.forEach(p => {
+    const g = state.sharedParams[p.name];
+    if (g) {
+      p.min = g.min; p.max = g.max; p.step = g.step; p.value = g.value;
+      values[p.name] = g.value;
+    } else {
+      values[p.name] = p.value;
+    }
+  });
+  fn.ast = substituteParams(fn.baseAst, values);
+}
+
+function syncParamToFunctions(name) {
+  const g = state.sharedParams[name];
+  if (!g) return;
+  for (const fn of state.functions) {
+    if (!fn.params || !fn.params.some(p => p.name === name)) continue;
+    fn.params.forEach(p => {
+      if (p.name !== name) return;
+      p.min = g.min; p.max = g.max; p.step = g.step; p.value = g.value;
+    });
+    recomputeFunctionAst(fn);
+  }
+}
+
+function syncAllParams() {
+  for (const name of Object.keys(state.sharedParams || {})) syncParamToFunctions(name);
 }
 
 function renderParamPanel() {
@@ -4341,13 +4380,16 @@ function scheduleParamAnalysis() {
 function setParamValue(fn, index, value) {
   const p = fn.params[index];
   if (!p) return;
-  const v = clamp(Number(value), p.min, p.max);
+  let g = state.sharedParams[p.name];
+  if (!g) {
+    g = { name: p.name, min: p.min, max: p.max, step: p.step, value: p.value };
+    state.sharedParams[p.name] = g;
+  }
+  const v = clamp(Number(value), g.min, g.max);
   if (!Number.isFinite(v)) return;
   if (!state.paramDragging) { pushHistory(); state.paramDragging = true; }
-  p.value = v;
-  const values = {};
-  fn.params.forEach(q => { values[q.name] = q.value; });
-  fn.ast = substituteParams(fn.baseAst, values);
+  g.value = v;
+  syncParamToFunctions(p.name);
   state.calc = null;
   resetCalcHints();
   keyPointCache.clear();
@@ -4368,18 +4410,21 @@ function setParamRange(fn, index, field, value) {
   if (!p) return;
   const v = Number(value);
   if (!Number.isFinite(v)) { renderParamPanel(); return; }
+  let g = state.sharedParams[p.name];
+  if (!g) {
+    g = { name: p.name, min: p.min, max: p.max, step: p.step, value: p.value };
+    state.sharedParams[p.name] = g;
+  }
   if (!state.paramDragging) { pushHistory(); state.paramDragging = true; }
   if (field === 'min') {
-    if (v >= p.max) { toast('最小值需要小于最大值', 'warn'); renderParamPanel(); return; }
-    p.min = v;
+    if (v >= g.max) { toast('最小值需要小于最大值', 'warn'); renderParamPanel(); return; }
+    g.min = v;
   } else {
-    if (v <= p.min) { toast('最大值需要大于最小值', 'warn'); renderParamPanel(); return; }
-    p.max = v;
+    if (v <= g.min) { toast('最大值需要大于最小值', 'warn'); renderParamPanel(); return; }
+    g.max = v;
   }
-  p.value = clamp(p.value, p.min, p.max);
-  const values = {};
-  fn.params.forEach(q => { values[q.name] = q.value; });
-  fn.ast = substituteParams(fn.baseAst, values);
+  g.value = clamp(g.value, g.min, g.max);
+  syncParamToFunctions(p.name);
   state.calc = null;
   resetCalcHints();
   keyPointCache.clear();
@@ -4512,6 +4557,7 @@ function addFunctionFromInput() {
     state.functions.forEach((f, i) => { f.color = fnColor(i); });
   }
   state.activeFnId = fn.id;
+  syncAllParams();
   state.calc = null;
   resetCalcHints();
   state.analysisMode = 'function';
@@ -5945,6 +5991,7 @@ function ocrApplyData(text, replace) {
     state.activeFnId = fn.id;
     addedFns++;
   }
+  syncAllParams();
   state.calc = null;
   resetCalcHints();
   if (addedFns) {
@@ -6097,6 +6144,7 @@ function saveState() {
       mode: state.mode,
       tab: state.tab,
       functions: state.functions.map(f => ({ id: f.id, expr: f.expr, color: f.color, visible: f.visible, params: cloneData(f.params) })),
+      sharedParams: state.sharedParams,
       activeFnId: state.activeFnId,
       curve: state.curve,
       conicResult: state.conicResult,
@@ -6137,6 +6185,7 @@ function restoreState() {
         if (data.conicParams[k]) state.conicParams[k] = Object.assign(state.conicParams[k], data.conicParams[k]);
       }
     }
+    state.sharedParams = data.sharedParams && typeof data.sharedParams === 'object' ? data.sharedParams : {};
     const fns = [];
     for (const f of (data.functions || [])) {
       if (!f || typeof f.expr !== 'string') continue;
@@ -6145,6 +6194,7 @@ function restoreState() {
       } catch { /* 忽略损坏的旧表达式 */ }
     }
     state.functions = fns;
+    syncAllParams();
     state.activeFnId = fns.some(f => f.id === data.activeFnId) ? data.activeFnId : (fns[0] ? fns[0].id : null);
     if (data.curve && data.curve.kind) state.curve = data.curve;
     if (data.conicResult && data.conicResult.kind) state.conicResult = data.conicResult;
